@@ -19,7 +19,9 @@
       }
     ],
     "paths": {
+      "@/*": ["./src/*"],
       "@zhidu/web/*": ["./src/*"],
+      "@zhidu/ui": ["../../packages/ui/src/index.ts"],
       "@zhidu/ui/*": ["../../packages/ui/src/*"],
       "@zhidu/shared/*": ["../../packages/shared/src/*"],
       "@zhidu/db/*": ["../../packages/db/src/*"],

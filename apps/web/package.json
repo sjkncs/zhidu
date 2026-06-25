@@ -11,11 +11,16 @@
     "clean": "rm -rf .next node_modules"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.4.0",
+    "@supabase/ssr": "^0.12.0",
+    "@zhidu/shared": "workspace:*",
+    "@zhidu/ui": "workspace:*",
     "next": "16.2.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "@zhidu/ui": "workspace:*",
-    "@zhidu/shared": "workspace:*"
+    "react-hook-form": "^7.80.0",
+    "zod": "^4.4.3",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
