@@ -1,0 +1,15 @@
+{
+  "name": "@zhidu/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf src-tauri/target node_modules"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.5.0",
+    "typescript": "^5.7.0"
+  }
+}
