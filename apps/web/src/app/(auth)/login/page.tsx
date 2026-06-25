@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
 import { Button, Input } from '@zhidu/ui';
 import { signIn } from '@/lib/supabase/actions';
@@ -22,7 +23,9 @@ export default function LoginPage() {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<LoginFormData>();
+  } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+  });
 
   const onSubmit = async (data: LoginFormData) => {
     setError(null);

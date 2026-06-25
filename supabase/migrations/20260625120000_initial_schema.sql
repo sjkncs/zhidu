@@ -7,6 +7,35 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+-- Drop existing tables that might conflict (Supabase defaults, previous runs)
+DROP TABLE IF EXISTS public.plan_items CASCADE;
+DROP TABLE IF EXISTS public.application_plans CASCADE;
+DROP TABLE IF EXISTS public.assessments CASCADE;
+DROP TABLE IF EXISTS public.admission_scores CASCADE;
+DROP TABLE IF EXISTS public.majors CASCADE;
+DROP TABLE IF EXISTS public.universities CASCADE;
+DROP TABLE IF EXISTS public.career_paths CASCADE;
+DROP TABLE IF EXISTS public.goals CASCADE;
+DROP TABLE IF EXISTS public.courses CASCADE;
+DROP TABLE IF EXISTS public.skill_nodes CASCADE;
+DROP TABLE IF EXISTS public.skill_trees CASCADE;
+DROP TABLE IF EXISTS public.notes CASCADE;
+DROP TABLE IF EXISTS public.folders CASCADE;
+DROP TABLE IF EXISTS public.resumes CASCADE;
+DROP TABLE IF EXISTS public.internships CASCADE;
+DROP TABLE IF EXISTS public.research_projects CASCADE;
+DROP TABLE IF EXISTS public.papers CASCADE;
+DROP TABLE IF EXISTS public.schedule_events CASCADE;
+DROP TABLE IF EXISTS public.todos CASCADE;
+DROP TABLE IF EXISTS public.memos CASCADE;
+DROP TABLE IF EXISTS public.diary_entries CASCADE;
+DROP TABLE IF EXISTS public.transactions CASCADE;
+DROP TABLE IF EXISTS public.user_settings CASCADE;
+DROP TABLE IF EXISTS public.profiles CASCADE;
+DROP FUNCTION IF EXISTS set_updated_at() CASCADE;
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP TRIGGER IF EXISTS on_auth_user_settings_created ON auth.users;
+
 -- ============================================================================
 -- Helper: updated_at trigger function
 -- ============================================================================
@@ -104,7 +133,7 @@ CREATE TRIGGER on_auth_user_settings_created
 -- 3. universities — college/university reference data
 -- ============================================================================
 CREATE TABLE public.universities (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   province TEXT NOT NULL,
   city TEXT NOT NULL,
@@ -129,7 +158,7 @@ CREATE POLICY "Universities are publicly readable"
 -- 4. majors — academic major reference data
 -- ============================================================================
 CREATE TABLE public.majors (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   category TEXT NOT NULL,
   duration INTEGER DEFAULT 4,
@@ -149,7 +178,7 @@ CREATE POLICY "Majors are publicly readable"
 -- 5. admission_scores — historical admission score data
 -- ============================================================================
 CREATE TABLE public.admission_scores (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   university_id UUID NOT NULL REFERENCES public.universities(id) ON DELETE CASCADE,
   major_id UUID REFERENCES public.majors(id) ON DELETE SET NULL,
   province TEXT NOT NULL,
@@ -174,7 +203,7 @@ CREATE POLICY "Admission scores are publicly readable"
 -- 6. assessments — MBTI, Holland, etc.
 -- ============================================================================
 CREATE TABLE public.assessments (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   type TEXT NOT NULL CHECK (type IN ('MBTI', 'HOLLAND', 'VALUES', 'ABILITY', 'CUSTOM')),
   raw_scores JSONB,
@@ -193,7 +222,7 @@ CREATE POLICY "Users can manage own assessments"
 -- 7. application_plans — volunteer recommendation plans
 -- ============================================================================
 CREATE TABLE public.application_plans (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   year INTEGER NOT NULL,
@@ -218,7 +247,7 @@ CREATE POLICY "Users can manage own plans"
 -- 8. plan_items — individual volunteer entries within a plan
 -- ============================================================================
 CREATE TABLE public.plan_items (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   plan_id UUID NOT NULL REFERENCES public.application_plans(id) ON DELETE CASCADE,
   university_id UUID NOT NULL REFERENCES public.universities(id),
   major_id UUID REFERENCES public.majors(id),
@@ -247,7 +276,7 @@ CREATE POLICY "Users can manage plan items via plan ownership"
 -- 9. career_paths — career planning routes
 -- ============================================================================
 CREATE TABLE public.career_paths (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   target_role TEXT NOT NULL,
   target_industry TEXT,
@@ -269,7 +298,7 @@ CREATE POLICY "Users can manage own career paths"
 -- 10. goals — short/long-term goals
 -- ============================================================================
 CREATE TABLE public.goals (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   description TEXT,
@@ -294,7 +323,7 @@ CREATE POLICY "Users can manage own goals"
 -- 11. courses — course management
 -- ============================================================================
 CREATE TABLE public.courses (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   credit REAL DEFAULT 0,
@@ -317,7 +346,7 @@ CREATE POLICY "Users can manage own courses"
 -- 12. todos — task management
 -- ============================================================================
 CREATE TABLE public.todos (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   description TEXT,
@@ -342,7 +371,7 @@ CREATE POLICY "Users can manage own todos"
 -- 13. diary_entries — daily journal with mood tracking
 -- ============================================================================
 CREATE TABLE public.diary_entries (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   title TEXT,
   content TEXT NOT NULL,
@@ -361,7 +390,7 @@ CREATE POLICY "Users can manage own diary"
 -- 14. memos — quick notes
 -- ============================================================================
 CREATE TABLE public.memos (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
   tags TEXT[] DEFAULT '{}',

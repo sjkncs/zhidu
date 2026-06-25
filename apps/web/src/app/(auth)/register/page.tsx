@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
 import { Button, Input } from '@zhidu/ui';
 import { signUp } from '@/lib/supabase/actions';
@@ -49,7 +50,9 @@ export default function RegisterPage() {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<RegisterFormData>();
+  } = useForm<RegisterFormData>({
+    resolver: zodResolver(registerSchema),
+  });
 
   const onSubmit = async (data: RegisterFormData) => {
     setError(null);
