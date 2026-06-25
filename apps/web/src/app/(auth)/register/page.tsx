@@ -58,7 +58,12 @@ export default function RegisterPage() {
     setError(null);
     setIsSubmitting(true);
     try {
-      await signUp({ email: data.email, password: data.password });
+      await signUp({
+        email: data.email,
+        password: data.password,
+        province: data.province,
+        grade: data.grade,
+      });
     } catch (err) {
       if (err instanceof Error) {
         if (err.message.includes('User already registered')) {
