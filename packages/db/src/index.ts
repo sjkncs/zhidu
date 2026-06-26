@@ -2,6 +2,8 @@
 
 import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js';
 
+export type { SupabaseClient } from '@supabase/supabase-js';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Supabase 客户端工厂
 // ─────────────────────────────────────────────────────────────────────────────
@@ -359,6 +361,30 @@ export interface TransactionRow {
   createdAt: string;
 }
 
+/** 知识文档表 */
+export interface KnowledgeDocumentRow {
+  id: string;
+  title: string;
+  collection: 'policy' | 'major_intro' | 'career' | 'volunteer' | 'general';
+  sourceUrl?: string;
+  content: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 知识分块表 */
+export interface KnowledgeChunkRow {
+  id: string;
+  documentId: string;
+  chunkIndex: number;
+  content: string;
+  metadata?: Record<string, unknown>;
+  /** 向量嵌入（Phase 3b，pgvector） */
+  embedding?: number[];
+  createdAt: string;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Database 类型（供 Supabase 客户端泛型使用）
 // ─────────────────────────────────────────────────────────────────────────────
@@ -391,6 +417,8 @@ export interface Database {
       memos: { Row: MemoRow };
       diary_entries: { Row: DiaryEntryRow };
       transactions: { Row: TransactionRow };
+      knowledge_documents: { Row: KnowledgeDocumentRow };
+      knowledge_chunks: { Row: KnowledgeChunkRow };
     };
   };
 }

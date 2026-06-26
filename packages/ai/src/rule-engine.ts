@@ -1,7 +1,8 @@
 // @zhidu/ai — 志愿推荐规则引擎
 // 实现位次换算、分数线匹配、冲稳保分类、录取概率估算
 
-import type { RuleEngine, TaskType } from './index';
+import type { RuleEngine } from './index';
+import { TaskType } from './index';
 import type { PlanItem, RiskLevel } from '@zhidu/shared';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -395,7 +396,7 @@ export function createRuleEngine(db: SupabaseLike): RuleEngine {
           riskLevel: c.riskLevel,
           historicalAvgScore: c.historicalAvgScore,
           estimatedProbability: c.probability,
-          sortOrder: c.sortOrder,
+          order: c.sortOrder,
           remark: `${c.universityName} - ${c.majorName} | ${c.tier} | ${c.city} | 趋势: ${c.trend > 0 ? '+' : ''}${c.trend}/年`,
         }));
       } catch (err) {

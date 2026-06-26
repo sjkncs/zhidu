@@ -238,6 +238,10 @@ export interface IntentResult {
 
 /**
  * IntentRouter — 根据用户查询识别意图并路由到对应服务
+ *
+ * 意图识别策略（Phase 3）：
+ * - 关键词匹配 → 快速路由
+ * - 后续可升级为小模型分类
  */
 export class IntentRouter {
   constructor(
@@ -248,23 +252,92 @@ export class IntentRouter {
 
   /**
    * 识别用户意图
-   * @throws 当前为骨架实现，抛出 "not implemented"
+   * 基于关键词 + 模式匹配的快速分类
    */
   async identifyIntent(query: string, context?: string): Promise<IntentResult> {
-    // TODO: 实现基于关键词 + 小模型的意图识别
-    throw new Error('not implemented');
+    const q = (query + (context ?? '')).toLowerCase();
+
+    // 1. 志愿匹配（分数线、位次、志愿推荐）
+    const volunteerKeywords = ['分数线', '录取', '志愿', '位次', '投档', '冲稳保',
+      '冲一冲', '稳一稳', '保一保', '平行志愿', '多少分', '能上', '报哪'];
+    if (volunteerKeywords.some(k => q.includes(k))) {
+      const scoreMatch = query.match(/(\d{3})\s*分/);
+      const provincePatterns = ['北京', '天津', '上海', '重庆', '广东', '浙江', '江苏',
+        '山东', '河南', '四川', '湖北', '湖南', '河北', '安徽', '福建', '陕西',
+        '辽宁', '吉林', '黑龙江', '山西', '江西', '广西', '云南', '贵州', '甘肃'];
+      const province = provincePatterns.find(p => q.includes(p));
+
+      return {
+        taskType: TaskType.VOLUNTEER_MATCH,
+        strategy: 'hybrid',
+        confidence: 0.9,
+        entities: {
+          score: scoreMatch ? parseInt(scoreMatch[1]) : undefined,
+          province,
+        },
+      };
+    }
+
+    // 2. 知识问答（政策、专业介绍、院校信息）
+    const knowledgeKeywords = ['政策', '招生', '专业介绍', '学什么', '什么专业',
+      '专业怎么样', '好不好', '就业前景', '课程', '培养', '方向',
+      '985', '211', '双一流', '一本', '二本'];
+    if (knowledgeKeywords.some(k => q.includes(k))) {
+      return {
+        taskType: TaskType.KNOWLEDGE_QA,
+        strategy: 'rag',
+        confidence: 0.85,
+      };
+    }
+
+    // 3. 生涯规划（职业、就业、考研、实习）
+    const careerKeywords = ['职业', '就业', '工作', '考研', '深造', '实习',
+      '简历', '面试', '规划', '发展方向', '出路', '薪资', '工资'];
+    if (careerKeywords.some(k => q.includes(k))) {
+      return {
+        taskType: TaskType.CAREER_PLAN,
+        strategy: 'hybrid',
+        confidence: 0.8,
+      };
+    }
+
+    // 4. 情感/日记
+    const emotionKeywords = ['心情', '情绪', '压力', '焦虑', '不开心', '难过',
+      '烦恼', '吐槽', '日记'];
+    if (emotionKeywords.some(k => q.includes(k))) {
+      return {
+        taskType: TaskType.EMOTION_ANALYSIS,
+        strategy: 'llm',
+        confidence: 0.75,
+      };
+    }
+
+    // 5. 学习计划
+    const studyKeywords = ['学习计划', '复习', '备考', '提分', '怎么学', '安排'];
+    if (studyKeywords.some(k => q.includes(k))) {
+      return {
+        taskType: TaskType.STUDY_PLAN,
+        strategy: 'rag',
+        confidence: 0.8,
+      };
+    }
+
+    // 6. 默认：通用对话
+    return {
+      taskType: TaskType.GENERAL_CHAT,
+      strategy: 'llm',
+      confidence: 0.6,
+    };
   }
 
   /**
    * 路由并执行请求
    */
   async route(request: AIRequest): Promise<AIResponse> {
-    // 1. 识别意图
     const intent = request.taskType
       ? { taskType: request.taskType, strategy: 'hybrid' as RouteStrategy, confidence: 1.0 }
       : await this.identifyIntent(request.query);
 
-    // 2. 根据策略分发
     switch (intent.strategy) {
       case 'rule':
         return this.handleByRule(intent.taskType, request);
@@ -275,27 +348,128 @@ export class IntentRouter {
       case 'hybrid':
         return this.handleHybrid(intent.taskType, request);
       default:
-        throw new Error(`Unknown strategy: ${intent.strategy}`);
+        return this.handleByLLM(intent.taskType, request);
     }
   }
 
   private async handleByRule(taskType: TaskType, request: AIRequest): Promise<AIResponse> {
-    throw new Error('not implemented');
+    if (!this.ruleEngine.canHandle(taskType)) {
+      return this.handleByLLM(taskType, request);
+    }
+    const result = await this.ruleEngine.execute(taskType, request.params ?? {});
+    return { taskType, strategy: 'rule', content: '', data: result, confidence: 1.0 };
   }
 
   private async handleByRAG(taskType: TaskType, request: AIRequest): Promise<AIResponse> {
-    throw new Error('not implemented');
+    if (!this.ragService.canHandle(taskType)) {
+      return this.handleByLLM(taskType, request);
+    }
+    const collections = this.getCollectionsForTask(taskType);
+    const { content, sources } = await this.ragService.retrieveAndGenerate({
+      query: request.query,
+      collections,
+      context: request.context?.map(c => `${c.role}: ${c.content}`).join('\n'),
+    });
+    return {
+      taskType, strategy: 'rag', content, confidence: 0.85,
+      sources: sources.map(s => ({
+        title: (s.metadata as Record<string, unknown>)?.title as string ?? '',
+        url: (s.metadata as Record<string, unknown>)?.sourceUrl as string | undefined,
+        snippet: s.content.slice(0, 200),
+      })),
+    };
   }
 
   private async handleByLLM(taskType: TaskType, request: AIRequest): Promise<AIResponse> {
-    throw new Error('not implemented');
+    const systemPrompt = PROMPT_TEMPLATES[
+      this.getTemplateKey(taskType) as keyof typeof PROMPT_TEMPLATES
+    ] ?? PROMPT_TEMPLATES.KNOWLEDGE_SYSTEM;
+
+    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: systemPrompt },
+    ];
+    if (request.context) {
+      for (const msg of request.context) {
+        messages.push({ role: msg.role, content: msg.content });
+      }
+    }
+    messages.push({ role: 'user', content: request.query });
+
+    const content = await this.llmService.chat({
+      messages,
+      options: { temperature: 0.7, maxTokens: 2048 },
+    });
+    return { taskType, strategy: 'llm', content, confidence: 0.75 };
   }
 
   /**
    * 混合处理：先规则筛选 → 再 RAG 检索 → 最后 LLM 润色生成
    */
   private async handleHybrid(taskType: TaskType, request: AIRequest): Promise<AIResponse> {
-    throw new Error('not implemented');
+    // 志愿推荐：规则引擎 + RAG + LLM
+    if (taskType === TaskType.VOLUNTEER_MATCH && this.ruleEngine.canHandle(taskType)) {
+      const score = (request.params?.score as number) ?? 0;
+      const province = (request.params?.province as string) ?? '';
+
+      if (score > 0 && province) {
+        const candidates = await this.ruleEngine.matchByScore({ score, province });
+
+        let ragContext = '';
+        if (this.ragService.canHandle(taskType)) {
+          const chunks = await this.ragService.retrieve({
+            query: `${province} ${score}分 志愿填报 冲稳保`,
+            collections: ['volunteer', 'policy'],
+            topK: 3,
+          });
+          ragContext = chunks.map(c => c.content).join('\n\n');
+        }
+
+        const summary = candidates.slice(0, 20).map(c =>
+          `${c.remark} | 概率: ${((c.estimatedProbability ?? 0) * 100).toFixed(0)}% | ${c.riskLevel}`
+        ).join('\n');
+
+        const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+          { role: 'system', content: PROMPT_TEMPLATES.VOLUNTEER_SYSTEM },
+          {
+            role: 'user',
+            content: `分数: ${score}分, 省份: ${province}\n\n候选志愿方案：\n${summary}\n\n${ragContext ? `参考资料：\n${ragContext}` : ''}\n\n请给出方案解读和建议。`,
+          },
+        ];
+
+        const content = await this.llmService.chat({ messages, options: { temperature: 0.6, maxTokens: 2048 } });
+        return { taskType, strategy: 'hybrid', content, data: candidates, confidence: 0.9 };
+      }
+    }
+
+    if (this.ragService.canHandle(taskType)) {
+      return this.handleByRAG(taskType, request);
+    }
+    return this.handleByLLM(taskType, request);
+  }
+
+  // ─── 辅助方法 ───
+
+  private getCollectionsForTask(taskType: TaskType): string[] {
+    const mapping: Partial<Record<TaskType, string[]>> = {
+      [TaskType.KNOWLEDGE_QA]: ['policy', 'major_intro', 'general'],
+      [TaskType.CAREER_PLAN]: ['career', 'major_intro'],
+      [TaskType.MAJOR_RECOMMEND]: ['major_intro', 'career'],
+      [TaskType.STUDY_PLAN]: ['general', 'policy'],
+      [TaskType.VOLUNTEER_MATCH]: ['volunteer', 'policy'],
+      [TaskType.GENERAL_CHAT]: ['policy', 'major_intro', 'career', 'volunteer', 'general'],
+    };
+    return mapping[taskType] ?? ['general'];
+  }
+
+  private getTemplateKey(taskType: TaskType): string {
+    const mapping: Partial<Record<TaskType, string>> = {
+      [TaskType.VOLUNTEER_MATCH]: 'VOLUNTEER_SYSTEM',
+      [TaskType.CAREER_PLAN]: 'CAREER_SYSTEM',
+      [TaskType.RESUME_POLISH]: 'RESUME_SYSTEM',
+      [TaskType.INTERVIEW_PREP]: 'INTERVIEW_SYSTEM',
+      [TaskType.KNOWLEDGE_QA]: 'KNOWLEDGE_SYSTEM',
+    };
+    return mapping[taskType] ?? 'KNOWLEDGE_SYSTEM';
   }
 }
 
@@ -305,34 +479,33 @@ export class IntentRouter {
 
 /**
  * 创建混合路由实例的工厂函数
- * @param config - 各服务的配置（骨架阶段接受空对象）
+ * @param config - 各服务的配置（未提供时使用空操作实现）
  */
 export function createHybridRouter(config?: {
   ruleEngine?: RuleEngine;
   ragService?: RAGService;
   llmService?: LLMService;
 }): IntentRouter {
-  // 骨架阶段：使用占位实现
   const noopRule: RuleEngine = {
     canHandle: () => false,
-    matchByScore: async () => { throw new Error('not implemented'); },
-    rankToScore: async () => { throw new Error('not implemented'); },
-    classifyRisk: async () => { throw new Error('not implemented'); },
-    execute: async () => { throw new Error('not implemented'); },
+    matchByScore: async () => [],
+    rankToScore: async () => ({ equivalentScore: 0, confidence: 0 }),
+    classifyRisk: async () => [],
+    execute: async () => null,
   };
 
   const noopRag: RAGService = {
     canHandle: () => false,
-    retrieve: async () => { throw new Error('not implemented'); },
-    retrieveAndGenerate: async () => { throw new Error('not implemented'); },
-    index: async () => { throw new Error('not implemented'); },
+    retrieve: async () => [],
+    retrieveAndGenerate: async () => ({ content: '', sources: [] }),
+    index: async () => {},
   };
 
   const noopLlm: LLMService = {
     canHandle: () => false,
-    chat: async () => { throw new Error('not implemented'); },
-    chatStream: async function* () { throw new Error('not implemented'); },
-    chatJSON: async () => { throw new Error('not implemented'); },
+    chat: async () => '',
+    chatStream: async function* () { yield { delta: '', done: true }; },
+    chatJSON: async () => ({}) as any,
   };
 
   return new IntentRouter(
@@ -375,3 +548,22 @@ export {
   buildCareerPathPrompt,
 } from './llm-service';
 export type { ChatMessage, LLMConfig } from './llm-service';
+
+// Re-export chunker
+export { chunkText, chunkDocuments } from './chunker';
+export type { ChunkOptions, TextChunk, DocumentToChunk, ChunkedDocument } from './chunker';
+
+// Re-export embedding service
+export {
+  createEmbeddingService,
+  createNoopEmbeddingService,
+  createHttpEmbeddingService,
+} from './embedding-service';
+export type { EmbeddingService, HttpEmbeddingConfig } from './embedding-service';
+
+// Re-export RAG service
+export { createRAGService, buildRAGPrompt } from './rag-service';
+export type { RAGServiceConfig, SearchResultRow } from './rag-service';
+
+// Re-export knowledge seed
+export { seedKnowledge, SEED_KNOWLEDGE } from './knowledge-seed';
