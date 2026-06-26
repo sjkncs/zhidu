@@ -530,6 +530,213 @@ export interface SkillTreeAIResult {
   nodes: SkillTreeAINode[];
 }
 
+/**
+ * 构建 AI 周回顾 Prompt（JSON 结构化输出，配合 chatJSON 使用）
+ *
+ * 分析用户一周内的待办完成情况、番茄钟数据和日程安排，生成时间利用洞察。
+ */
+export function buildWeeklyReviewPrompt(params: {
+  weekStart: string;
+  weekEnd: string;
+  todos: Array<{ title: string; completed: boolean; category: string; priority: number }>;
+  pomodoroCount: number;
+  pomodoroMinutes: number;
+  events: Array<{ title: string; eventType: string; duration: number }>;
+}): ChatMessage[] {
+  const completedCount = params.todos.filter(t => t.completed).length;
+  const completionRate = params.todos.length > 0
+    ? Math.round((completedCount / params.todos.length) * 100)
+    : 0;
+
+  const categorySummary: Record<string, { total: number; completed: number }> = {};
+  for (const t of params.todos) {
+    if (!categorySummary[t.category]) categorySummary[t.category] = { total: 0, completed: 0 };
+    categorySummary[t.category].total++;
+    if (t.completed) categorySummary[t.category].completed++;
+  }
+
+  return [
+    {
+      role: 'system',
+      content: `你是"智渡"平台的时间管理教练 AI。你需要根据用户本周的时间使用数据，生成一份结构化的周回顾报告。
+
+【输出要求】
+你必须且只能输出一个 JSON 对象，格式如下：
+
+{
+  "overallScore": 75,
+  "summary": "一句话总结本周时间利用情况",
+  "highlights": ["本周亮点1", "本周亮点2"],
+  "improvements": ["改进建议1", "改进建议2", "改进建议3"],
+  "categoryAnalysis": [
+    { "category": "STUDY", "score": 80, "insight": "学习类任务完成率高，继续保持" }
+  ],
+  "timeAllocation": {
+    "study": 40,
+    "work": 20,
+    "personal": 15,
+    "health": 5,
+    "other": 20
+  },
+  "nextWeekFocus": "下周重点关注方向建议",
+  "encouragement": "一句鼓励的话"
+}
+
+【生成规则】
+1. overallScore 为 0-100 的整数，综合评估时间利用效率
+2. highlights 列出 2-3 个本周做得好的方面
+3. improvements 列出 2-3 个具体可操作的改进建议
+4. categoryAnalysis 按类别分析完成率和表现
+5. timeAllocation 为百分比（总和 100），基于实际数据推算
+6. 语气积极但有建设性，不空泛夸奖`,
+    },
+    {
+      role: 'user',
+      content: `请分析我本周（${params.weekStart} ~ ${params.weekEnd}）的时间使用情况：
+
+待办事项：
+- 总计 ${params.todos.length} 项，完成 ${completedCount} 项（完成率 ${completionRate}%）
+- 按类别：${Object.entries(categorySummary).map(([cat, v]) => `${cat}: ${v.completed}/${v.total}`).join('，')}
+
+番茄钟：
+- 完成 ${params.pomodoroCount} 个番茄钟，共 ${params.pomodoroMinutes} 分钟专注时间
+
+日程事件：
+${params.events.map(e => `  - ${e.title} (${e.eventType}, ${e.duration}分钟)`).join('\n') || '  无日程事件'}
+
+请生成周回顾报告。`,
+    },
+  ];
+}
+
+/** 周回顾 AI 输出类型 */
+export interface WeeklyReviewCategoryAnalysis {
+  category: string;
+  score: number;
+  insight: string;
+}
+
+export interface WeeklyReviewResult {
+  overallScore: number;
+  summary: string;
+  highlights: string[];
+  improvements: string[];
+  categoryAnalysis: WeeklyReviewCategoryAnalysis[];
+  timeAllocation: Record<string, number>;
+  nextWeekFocus: string;
+  encouragement: string;
+}
+
+/**
+ * 构建 AI 成长洞察 Prompt（JSON 结构化输出，配合 chatJSON 使用）
+ *
+ * 分析用户一段时间内的日记情绪趋势、高频标签，生成成长洞察。
+ */
+export function buildGrowthInsightsPrompt(params: {
+  period: string;
+  entries: Array<{
+    date: string;
+    mood: number;
+    moodTags: string[];
+    title: string;
+    contentPreview: string;
+  }>;
+}): ChatMessage[] {
+  const avgMood = params.entries.length > 0
+    ? Math.round(params.entries.reduce((sum, e) => sum + e.mood, 0) / params.entries.length * 10) / 10
+    : 0;
+
+  const tagCounts: Record<string, number> = {};
+  for (const e of params.entries) {
+    for (const tag of e.moodTags) {
+      tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+    }
+  }
+  const topTags = Object.entries(tagCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  return [
+    {
+      role: 'system',
+      content: `你是"智渡"平台的成长洞察分析师 AI。你需要根据用户一段时间内的日记记录，生成结构化的成长洞察报告。
+
+【输出要求】
+你必须且只能输出一个 JSON 对象，格式如下：
+
+{
+  "overallMood": 7.2,
+  "moodTrend": "稳定向好 或 波动较大 或 持续低迷 或 起伏明显",
+  "moodInsight": "对情绪趋势的分析和建议（2-3句话）",
+  "topEmotions": [
+    { "tag": "平静", "count": 15, "interpretation": "平静出现频率最高，说明整体心态较好" }
+  ],
+  "growthAreas": [
+    { "area": "学业压力管理", "observation": "观察到的现象", "suggestion": "具体建议" }
+  ],
+  "journalingHabits": {
+    "frequency": "高/中/低",
+    "consistency": "好/一般/需要改善",
+    "depth": "深入/适中/偏表面"
+  },
+  "monthlyHighlight": "本月最值得关注的成长事件或转变",
+  "affirmation": "对用户的一段真诚肯定和鼓励（3-4句话）"
+}
+
+【生成规则】
+1. overallMood 为 1-10 的浮点数，表示期间平均情绪水平
+2. topEmotions 列出前 3-5 个高频情绪标签及其解读
+3. growthAreas 识别 2-3 个可改善的成长维度
+4. journalingHabits 基于记录频率和内容深度评估
+5. affirmation 要真诚、具体，不空泛`,
+    },
+    {
+      role: 'user',
+      content: `请分析我${params.period}的成长日记：
+
+共 ${params.entries.length} 篇日记，平均心情评分 ${avgMood}/10
+高频情绪标签：${topTags.map(([tag, count]) => `${tag}(${count}次)`).join('、') || '无'}
+
+最近日记摘要：
+${params.entries.slice(0, 10).map(e =>
+  `- ${e.date} | 心情: ${e.mood}/10 | ${e.moodTags.join(',')} | ${e.title || '无标题'} | ${e.contentPreview}`
+).join('\n')}
+
+请生成成长洞察报告。`,
+    },
+  ];
+}
+
+/** 成长洞察 AI 输出类型 */
+export interface GrowthInsightEmotion {
+  tag: string;
+  count: number;
+  interpretation: string;
+}
+
+export interface GrowthInsightArea {
+  area: string;
+  observation: string;
+  suggestion: string;
+}
+
+export interface GrowthInsightHabits {
+  frequency: string;
+  consistency: string;
+  depth: string;
+}
+
+export interface GrowthInsightResult {
+  overallMood: number;
+  moodTrend: string;
+  moodInsight: string;
+  topEmotions: GrowthInsightEmotion[];
+  growthAreas: GrowthInsightArea[];
+  journalingHabits: GrowthInsightHabits;
+  monthlyHighlight: string;
+  affirmation: string;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 导出
 // ─────────────────────────────────────────────────────────────────────────────

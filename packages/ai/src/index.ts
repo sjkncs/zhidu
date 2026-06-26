@@ -547,6 +547,8 @@ export {
   buildMajorComparisonPrompt,
   buildCareerPathPrompt,
   buildSkillTreePrompt,
+  buildWeeklyReviewPrompt,
+  buildGrowthInsightsPrompt,
 } from './llm-service';
 export type {
   ChatMessage,
@@ -557,6 +559,12 @@ export type {
   SkillTreeAIResult,
   SkillTreeAINode,
   SkillTreeAIResource,
+  WeeklyReviewResult,
+  WeeklyReviewCategoryAnalysis,
+  GrowthInsightResult,
+  GrowthInsightEmotion,
+  GrowthInsightArea,
+  GrowthInsightHabits,
 } from './llm-service';
 
 // Re-export chunker

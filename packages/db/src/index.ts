@@ -345,10 +345,28 @@ export interface ScheduleEventRow {
   endTime?: string;
   /** 全天事件 */
   allDay: boolean;
-  /** 重复规则（RRULE 字符串） */
-  recurrence?: string;
-  /** 提醒（提前分钟数） */
-  reminderMinutes?: number;
+  /** 事件类型 */
+  eventType: 'GENERAL' | 'STUDY' | 'EXAM' | 'MEETING' | 'PERSONAL' | 'DEADLINE';
+  /** 重复规则 JSON: { frequency, until, count } */
+  recurrence?: Record<string, unknown>;
+  /** 地点 */
+  location?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 番茄钟会话表 */
+export interface PomodoroSessionRow {
+  id: string;
+  userId: string;
+  /** 关联待办 ID */
+  todoId?: string;
+  /** 时长（分钟）1-120 */
+  durationMinutes: number;
+  completed: boolean;
+  startedAt: string;
+  completedAt?: string;
+  notes?: string;
 }
 
 /** 待办事项表 */
@@ -361,6 +379,14 @@ export interface TodoRow {
   /** 优先级 1-4 */
   priority?: number;
   dueDate?: string;
+  /** 父任务 ID（子任务支持） */
+  parentId?: string;
+  /** 标签 */
+  tags?: string[];
+  /** 分类 */
+  category: 'STUDY' | 'WORK' | 'PERSONAL' | 'HEALTH' | 'GENERAL';
+  /** 排序权重 */
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -369,9 +395,15 @@ export interface TodoRow {
 export interface MemoRow {
   id: string;
   userId: string;
+  /** 标题（可选） */
+  title?: string;
   content: string;
   tags?: string[];
+  isPinned: boolean;
+  remindAt?: string;
+  isArchived: boolean;
   createdAt: string;
+  updatedAt: string;
 }
 
 /** 日记表 */
@@ -382,8 +414,11 @@ export interface DiaryEntryRow {
   content: string;
   /** 心情评分 1-10 */
   mood?: number;
-  date: string;
+  /** 情绪标签 */
+  moodTags?: string[];
+  entryDate: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 /** 交易/消费记录表 */
@@ -452,6 +487,7 @@ export interface Database {
       research_projects: { Row: ResearchProjectRow };
       papers: { Row: PaperRow };
       schedule_events: { Row: ScheduleEventRow };
+      pomodoro_sessions: { Row: PomodoroSessionRow };
       todos: { Row: TodoRow };
       memos: { Row: MemoRow };
       diary_entries: { Row: DiaryEntryRow };
