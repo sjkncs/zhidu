@@ -1,11 +1,14 @@
+'use client';
+
 import Link from 'next/link';
+import { Microscope } from 'lucide-react';
 
 export default function ResearchPage() {
   return (
     <div className="mx-auto max-w-2xl">
       <div className="rounded-2xl border border-border bg-surface p-12 text-center">
-        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue/10 text-3xl">
-          🔬
+        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue/10">
+          <Microscope className="h-8 w-8 text-blue" />
         </div>
         <h1 className="text-2xl font-bold text-text-primary">科研</h1>
         <p className="mt-2 text-text-secondary">

@@ -1,8 +1,19 @@
 import Link from "next/link";
+import { Cpu, TrendingUp, Home as HomeIcon, Users } from "lucide-react";
 
-const features = [
+type IconComponent = React.ComponentType<{ className?: string }>;
+
+interface Feature {
+  icon: IconComponent;
+  title: string;
+  subtitle: string;
+  description: string;
+  tags: string[];
+}
+
+const features: Feature[] = [
   {
-    icon: "⚙️",
+    icon: Cpu,
     title: "核心引擎层",
     subtitle: "Core Engine",
     description:
@@ -10,7 +21,7 @@ const features = [
     tags: ["高校库", "专业库", "智能匹配"],
   },
   {
-    icon: "📈",
+    icon: TrendingUp,
     title: "成长管理层",
     subtitle: "Growth Management",
     description:
@@ -18,7 +29,7 @@ const features = [
     tags: ["学业规划", "目标追踪", "成长档案"],
   },
   {
-    icon: "🏠",
+    icon: HomeIcon,
     title: "个人空间层",
     subtitle: "Personal Space",
     description:
@@ -26,7 +37,7 @@ const features = [
     tags: ["笔记系统", "知识图谱", "智能复盘"],
   },
   {
-    icon: "🤝",
+    icon: Users,
     title: "关系网络层",
     subtitle: "Relationships",
     description:
@@ -187,7 +198,9 @@ export default function Home() {
                 className="group rounded-2xl border border-border bg-background p-8 transition hover:border-blue/30"
               >
                 <div className="mb-4 flex items-center gap-3">
-                  <span className="text-3xl">{feature.icon}</span>
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-navy/10">
+                    <feature.icon className="h-6 w-6 text-navy" />
+                  </div>
                   <div>
                     <h3 className="text-lg font-bold text-navy">{feature.title}</h3>
                     <span className="text-xs font-medium uppercase tracking-wider text-text-tertiary">

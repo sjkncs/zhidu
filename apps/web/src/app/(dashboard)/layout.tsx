@@ -1,29 +1,51 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useTheme } from 'next-themes';
 import { useAuthStore } from '@/stores/auth-store';
+import {
+  LayoutDashboard,
+  MessageSquare,
+  Target,
+  Compass,
+  BookOpen,
+  TreePine,
+  FileText,
+  Briefcase,
+  Microscope,
+  BookMarked,
+  StickyNote,
+  Clock,
+  Wallet,
+  Sun,
+  Moon,
+  Menu,
+} from 'lucide-react';
+
+type IconComponent = React.ComponentType<{ className?: string }>;
 
 interface NavItem {
-  icon: string;
+  icon: IconComponent;
   label: string;
   href: string;
 }
 
 const navItems: NavItem[] = [
-  { icon: '📊', label: '仪表盘', href: '/dashboard' },
-  { icon: '🎯', label: '志愿填报', href: '/dashboard/volunteer' },
-  { icon: '🧭', label: '生涯规划', href: '/dashboard/career' },
-  { icon: '📚', label: '知识库', href: '/dashboard/knowledge' },
-  { icon: '🌳', label: '技能树', href: '/dashboard/skills' },
-  { icon: '📄', label: '简历', href: '/dashboard/resume' },
-  { icon: '💼', label: '实习', href: '/dashboard/internship' },
-  { icon: '🔬', label: '科研', href: '/dashboard/research' },
-  { icon: '📔', label: '日记', href: '/dashboard/diary' },
-  { icon: '📝', label: '备忘', href: '/dashboard/memo' },
-  { icon: '⏰', label: '时间', href: '/dashboard/time' },
-  { icon: '💰', label: '财务', href: '/dashboard/finance' },
+  { icon: LayoutDashboard, label: '仪表盘', href: '/dashboard' },
+  { icon: MessageSquare, label: 'AI 助手', href: '/dashboard/chat' },
+  { icon: Target, label: '志愿填报', href: '/dashboard/volunteer' },
+  { icon: Compass, label: '生涯规划', href: '/dashboard/career' },
+  { icon: BookOpen, label: '知识库', href: '/dashboard/knowledge' },
+  { icon: TreePine, label: '技能树', href: '/dashboard/skills' },
+  { icon: FileText, label: '简历', href: '/dashboard/resume' },
+  { icon: Briefcase, label: '实习', href: '/dashboard/internship' },
+  { icon: Microscope, label: '科研', href: '/dashboard/research' },
+  { icon: BookMarked, label: '日记', href: '/dashboard/diary' },
+  { icon: StickyNote, label: '备忘', href: '/dashboard/memo' },
+  { icon: Clock, label: '时间', href: '/dashboard/time' },
+  { icon: Wallet, label: '财务', href: '/dashboard/finance' },
 ];
 
 function Sidebar({
@@ -74,6 +96,8 @@ function Sidebar({
                   ? pathname === '/dashboard'
                   : pathname.startsWith(item.href);
 
+              const Icon = item.icon;
+
               return (
                 <li key={item.href}>
                   <Link
@@ -86,9 +110,7 @@ function Sidebar({
                         : 'text-text-secondary hover:bg-surface-elevated hover:text-text-primary',
                     ].join(' ')}
                   >
-                    <span className="text-base leading-none" aria-hidden="true">
-                      {item.icon}
-                    </span>
+                    <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
                     <span>{item.label}</span>
                   </Link>
                 </li>
@@ -116,6 +138,35 @@ function Sidebar({
   );
 }
 
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted) {
+    return <div className="h-9 w-9" />;
+  }
+
+  const isDark = theme === 'dark';
+
+  return (
+    <button
+      type="button"
+      onClick={() => setTheme(isDark ? 'light' : 'dark')}
+      className="rounded-lg p-2 text-text-secondary hover:bg-surface-elevated hover:text-text-primary transition-colors"
+      aria-label="切换主题"
+      title={isDark ? '切换到浅色模式' : '切换到深色模式'}
+    >
+      {isDark ? (
+        <Sun className="h-5 w-5" />
+      ) : (
+        <Moon className="h-5 w-5" />
+      )}
+    </button>
+  );
+}
+
 function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
   const pathname = usePathname();
 
@@ -125,6 +176,7 @@ function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
     const href = '/' + segments.slice(0, i + 1).join('/');
     const labelMap: Record<string, string> = {
       dashboard: '仪表盘',
+      chat: 'AI 助手',
       volunteer: '志愿填报',
       career: '生涯规划',
       knowledge: '知识库',
@@ -153,19 +205,7 @@ function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
         className="rounded-lg p-2 text-text-secondary hover:bg-surface-elevated hover:text-text-primary lg:hidden"
         aria-label="打开菜单"
       >
-        <svg
-          className="h-5 w-5"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M4 6h16M4 12h16M4 18h16"
-          />
-        </svg>
+        <Menu className="h-5 w-5" />
       </button>
 
       {/* Breadcrumbs */}
@@ -196,27 +236,8 @@ function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Theme toggle placeholder */}
-      <button
-        type="button"
-        className="rounded-lg p-2 text-text-secondary hover:bg-surface-elevated hover:text-text-primary transition-colors"
-        aria-label="切换主题"
-        title="切换主题"
-      >
-        <svg
-          className="h-5 w-5"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
-          />
-        </svg>
-      </button>
+      {/* Theme toggle */}
+      <ThemeToggle />
     </header>
   );
 }

@@ -2,7 +2,7 @@
 // POST /api/knowledge/seed
 // Body: { reset?: boolean }  — reset=true 会先清空现有知识数据
 //
-// ⚠️ 此接口需要认证，仅管理员可调用
+// [!] 此接口需要认证，仅管理员可调用
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';

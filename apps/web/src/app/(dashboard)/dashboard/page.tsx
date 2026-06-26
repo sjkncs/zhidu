@@ -15,7 +15,7 @@ export default async function DashboardPage() {
       {/* Welcome section */}
       <div>
         <h1 className="text-2xl font-bold text-text-primary">
-          你好，{displayName} 👋
+          你好，{displayName}
         </h1>
         <p className="mt-1 text-sm text-text-secondary">
           欢迎回渡。今天想从哪里开始？

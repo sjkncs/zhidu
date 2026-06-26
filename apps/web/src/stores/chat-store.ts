@@ -1,0 +1,184 @@
+import { create } from 'zustand';
+import { parseSSEStream, type Source } from '@/lib/sse-parser';
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  sources?: Source[];
+  createdAt: number;
+  isStreaming?: boolean;
+}
+
+interface ChatState {
+  messages: ChatMessage[];
+  isStreaming: boolean;
+  error: string | null;
+
+  sendMessage: (query: string) => Promise<void>;
+  clearMessages: () => void;
+  clearError: () => void;
+}
+
+function generateId(): string {
+  return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+export const useChatStore = create<ChatState>((set, get) => ({
+  messages: [],
+  isStreaming: false,
+  error: null,
+
+  sendMessage: async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed || get().isStreaming) return;
+
+    // 添加用户消息
+    const userMsg: ChatMessage = {
+      id: generateId(),
+      role: 'user',
+      content: trimmed,
+      createdAt: Date.now(),
+    };
+
+    // 创建 assistant 占位消息
+    const assistantId = generateId();
+    const assistantMsg: ChatMessage = {
+      id: assistantId,
+      role: 'assistant',
+      content: '',
+      createdAt: Date.now(),
+      isStreaming: true,
+    };
+
+    set((state) => ({
+      messages: [...state.messages, userMsg, assistantMsg],
+      isStreaming: true,
+      error: null,
+    }));
+
+    // 构建上下文：最近 6 条历史消息（3 轮对话）
+    const allMessages = get().messages;
+    const context = allMessages
+      .filter((m) => !m.isStreaming)
+      .slice(-6)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    try {
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: trimmed,
+          stream: true,
+          context,
+        }),
+      });
+
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(
+          (errBody as Record<string, string>).error ?? `请求失败 (${response.status})`,
+        );
+      }
+
+      if (!response.body) {
+        throw new Error('响应流不可用');
+      }
+
+      const reader = response.body.getReader();
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+      // 30 秒无新数据超时
+      const resetTimeout = () => {
+        if (timeoutId) clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+          reader.cancel().catch(() => {});
+          set((state) => ({
+            isStreaming: false,
+            error: '响应超时，请重试',
+            messages: state.messages.map((m) =>
+              m.id === assistantId ? { ...m, isStreaming: false } : m,
+            ),
+          }));
+        }, 30000);
+      };
+
+      resetTimeout();
+
+      for await (const event of parseSSEStream(reader)) {
+        resetTimeout();
+
+        switch (event.type) {
+          case 'sources':
+            set((state) => ({
+              messages: state.messages.map((m) =>
+                m.id === assistantId ? { ...m, sources: event.sources } : m,
+              ),
+            }));
+            break;
+
+          case 'content':
+            set((state) => ({
+              messages: state.messages.map((m) =>
+                m.id === assistantId
+                  ? { ...m, content: m.content + event.delta }
+                  : m,
+              ),
+            }));
+            break;
+
+          case 'error':
+            set((state) => ({
+              error: event.error,
+              isStreaming: false,
+              messages: state.messages.map((m) =>
+                m.id === assistantId ? { ...m, isStreaming: false } : m,
+              ),
+            }));
+            break;
+
+          case 'done':
+            break;
+        }
+
+        if (event.type === 'error') break;
+      }
+
+      if (timeoutId) clearTimeout(timeoutId);
+
+      // 标记流结束
+      set((state) => ({
+        isStreaming: false,
+        messages: state.messages.map((m) =>
+          m.id === assistantId ? { ...m, isStreaming: false } : m,
+        ),
+      }));
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : '未知错误，请稍后重试';
+
+      set((state) => ({
+        isStreaming: false,
+        error: message,
+        messages: state.messages.map((m) =>
+          m.id === assistantId
+            ? {
+                ...m,
+                isStreaming: false,
+                content: m.content || '抱歉，生成回答时出现了错误。',
+              }
+            : m,
+        ),
+      }));
+    }
+  },
+
+  clearMessages: () => {
+    set({ messages: [], error: null });
+  },
+
+  clearError: () => {
+    set({ error: null });
+  },
+}));

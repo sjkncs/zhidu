@@ -2,6 +2,29 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Button, Card, Input } from '@zhidu/ui';
+import {
+  Settings,
+  Microscope,
+  Stethoscope,
+  TrendingUp,
+  ClipboardList,
+  Scale,
+  BookOpen,
+  GraduationCap,
+  Palette,
+  Wheat,
+  ScrollText,
+  MessageCircle,
+  Search,
+  Compass,
+  Ruler,
+  Target,
+  Lightbulb,
+  Brain,
+  AlertTriangle,
+  Flame,
+  Shield,
+} from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -37,18 +60,18 @@ const PROVINCES = [
 ];
 
 const CATEGORIES = [
-  { name: '工学', icon: '⚙️' },
-  { name: '理学', icon: '🔬' },
-  { name: '医学', icon: '🏥' },
-  { name: '经济学', icon: '📈' },
-  { name: '管理学', icon: '📋' },
-  { name: '法学', icon: '⚖️' },
-  { name: '文学', icon: '📖' },
-  { name: '教育学', icon: '🎓' },
-  { name: '艺术学', icon: '🎨' },
-  { name: '农学', icon: '🌾' },
-  { name: '历史学', icon: '📜' },
-  { name: '哲学', icon: '💭' },
+  { name: '工学', icon: Settings },
+  { name: '理学', icon: Microscope },
+  { name: '医学', icon: Stethoscope },
+  { name: '经济学', icon: TrendingUp },
+  { name: '管理学', icon: ClipboardList },
+  { name: '法学', icon: Scale },
+  { name: '文学', icon: BookOpen },
+  { name: '教育学', icon: GraduationCap },
+  { name: '艺术学', icon: Palette },
+  { name: '农学', icon: Wheat },
+  { name: '历史学', icon: ScrollText },
+  { name: '哲学', icon: MessageCircle },
 ];
 
 const POPULAR_CITIES = [
@@ -57,7 +80,7 @@ const POPULAR_CITIES = [
 ];
 
 const STEP_LABELS = ['查位次', '定方向', '理清逻辑', '生成方案'];
-const STEP_ICONS = ['🔍', '🧭', '📐', '🎯'];
+const STEP_ICONS = [Search, Compass, Ruler, Target];
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -291,7 +314,7 @@ export default function VolunteerWizardPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
                   ) : (
-                    <span>{STEP_ICONS[i]}</span>
+                    (() => { const StepIcon = STEP_ICONS[i]; return <StepIcon className="h-5 w-5" />; })()
                   )}
                 </div>
                 <span
@@ -357,7 +380,7 @@ export default function VolunteerWizardPage() {
       {/* Educational note */}
       <Card className="border-blue/20 bg-blue/5">
         <div className="flex items-start gap-3">
-          <span className="text-lg leading-none mt-0.5">💡</span>
+          <Lightbulb className="h-5 w-5 text-accent mt-0.5 shrink-0" />
           <div>
             <p className="text-sm font-medium text-text-primary">为什么位次比分数更重要？</p>
             <p className="mt-1 text-sm text-text-secondary">
@@ -518,7 +541,7 @@ export default function VolunteerWizardPage() {
                       : 'border-border bg-surface text-text-secondary hover:border-blue/30 hover:bg-blue/5',
                   ].join(' ')}
                 >
-                  <span className="text-2xl">{cat.icon}</span>
+                  <cat.icon className="h-6 w-6" />
                   <span className="text-xs font-medium">{cat.name}</span>
                   {selected && (
                     <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-blue text-white">
@@ -537,8 +560,8 @@ export default function VolunteerWizardPage() {
       {/* Optional: MBTI link */}
       <Card className="border-dashed">
         <div className="flex items-center gap-4 p-2">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-lg">
-            🧠
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-50">
+            <Brain className="h-5 w-5 text-purple-500" />
           </div>
           <div className="flex-1">
             <p className="text-sm font-medium text-text-primary">更深入地了解自己</p>
@@ -591,7 +614,7 @@ export default function VolunteerWizardPage() {
   const logicCards = [
     {
       title: '批次说明：提前批 vs 普通批',
-      icon: '📋',
+      icon: ClipboardList,
       summary: '了解不同批次的填报时机与适用场景',
       detail: [
         '提前批：通常在普通批之前录取，包括军校、公安院校、公费师范生、航海类专业、小语种等特殊类型。填报提前批不影响普通批，相当于多一次机会。',
@@ -601,7 +624,7 @@ export default function VolunteerWizardPage() {
     },
     {
       title: '冲稳保策略',
-      icon: '🎯',
+      icon: Target,
       summary: '科学分配志愿梯度，最大化录取概率',
       detail: [
         '冲（RUSH）：选择录取位次略高于你位次的院校，概率约 20-40%。万一"冲上"就是赚到。',
@@ -612,7 +635,7 @@ export default function VolunteerWizardPage() {
     },
     {
       title: '平行志愿规则',
-      icon: '📐',
+      icon: Ruler,
       summary: '理解"分数优先、遵循志愿"的投档逻辑',
       detail: [
         '平行志愿的核心规则：分数优先 —— 高分考生先投档，依次检索每位考生的志愿。',
@@ -623,7 +646,7 @@ export default function VolunteerWizardPage() {
     },
     {
       title: '常见陷阱',
-      icon: '⚠️',
+      icon: AlertTriangle,
       summary: '避开这些高频踩坑点，让每一分都不浪费',
       detail: [
         '陷阱一：只看分数不看位次 —— 每年分数线波动，位次才是真正的竞争力指标。',
@@ -654,8 +677,8 @@ export default function VolunteerWizardPage() {
                 onClick={() => setExpandedCard(isExpanded ? null : i)}
                 className="flex w-full items-center gap-4 p-5 text-left transition-colors hover:bg-gray-50"
               >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-navy/5 text-xl">
-                  {card.icon}
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-navy/5">
+                  <card.icon className="h-5 w-5" />
                 </span>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-semibold text-text-primary">{card.title}</h3>
@@ -750,7 +773,7 @@ export default function VolunteerWizardPage() {
       bg: 'bg-orange-50',
       text: 'text-orange-600',
       badge: 'bg-orange-100 text-orange-700',
-      icon: '🔥',
+      icon: Flame,
     },
     stable: {
       label: '稳',
@@ -759,7 +782,7 @@ export default function VolunteerWizardPage() {
       bg: 'bg-blue-50',
       text: 'text-blue-600',
       badge: 'bg-blue-100 text-blue-700',
-      icon: '🎯',
+      icon: Target,
     },
     safe: {
       label: '保',
@@ -768,7 +791,7 @@ export default function VolunteerWizardPage() {
       bg: 'bg-green-50',
       text: 'text-green-600',
       badge: 'bg-green-100 text-green-700',
-      icon: '🛡️',
+      icon: Shield,
     },
   } as const;
 
@@ -870,7 +893,7 @@ export default function VolunteerWizardPage() {
                   key={cat}
                   className={['rounded-xl border p-4 text-center', cfg.border, cfg.bg].join(' ')}
                 >
-                  <p className="text-lg">{cfg.icon}</p>
+                  <p className="text-lg"><cfg.icon className="h-5 w-5 inline-block" /></p>
                   <p className={['text-lg font-bold', cfg.text].join(' ')}>
                     {cfg.label} · {cfg.sublabel}
                   </p>
@@ -889,7 +912,7 @@ export default function VolunteerWizardPage() {
               return (
                 <div key={cat}>
                   <div className={['flex items-center gap-2 mb-3 rounded-lg px-3 py-2', cfg.bg].join(' ')}>
-                    <span>{cfg.icon}</span>
+                    <cfg.icon className="h-5 w-5" />
                     <span className={['text-sm font-bold', cfg.text].join(' ')}>
                       {cfg.label} · {cfg.sublabel}
                     </span>
@@ -932,7 +955,7 @@ export default function VolunteerWizardPage() {
       {!recLoading && !recError && recommendations.length === 0 && (
         <Card>
           <div className="flex flex-col items-center justify-center py-12">
-            <span className="text-4xl">🔍</span>
+            <Search className="h-10 w-10 text-text-tertiary" />
             <p className="mt-3 text-sm text-text-secondary">暂无推荐结果</p>
             <p className="mt-1 text-xs text-text-tertiary">请尝试调整分数或偏好后重新生成</p>
           </div>
