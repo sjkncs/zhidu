@@ -10,6 +10,7 @@ out/
 
 # Rust / Tauri
 src-tauri/target/
+src-tauri/gen/
 target/
 
 # Environment files

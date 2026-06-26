@@ -5,12 +5,11 @@
   "identifier": "com.zhidu.app",
   "build": {
     "frontendDist": "../../web/out",
-    "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "cd ../web && pnpm dev",
-    "beforeBuildCommand": "cd ../web && pnpm build"
+    "devUrl": "http://localhost:3001",
+    "beforeDevCommand": "cd ../../web && npx next dev --port 3001",
+    "beforeBuildCommand": "cd ../../web && pnpm build"
   },
   "app": {
-    "title": "Zhidu",
     "windows": [
       {
         "title": "Zhidu",

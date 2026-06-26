@@ -362,3 +362,7 @@ export const PROMPT_TEMPLATES = {
   KNOWLEDGE_SYSTEM: `你是一位教育领域知识助手。基于检索到的可靠信息回答用户关于招生政策、
 专业介绍、院校信息等问题。必须引用来源，不编造事实。`,
 } as const;
+
+// Re-export rule engine
+export { createRuleEngine } from './rule-engine';
+export type { ScoreStats, CandidateItem, AdmissionRecord } from './rule-engine';
