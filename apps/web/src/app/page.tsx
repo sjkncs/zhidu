@@ -286,12 +286,12 @@ export default function Home() {
               <span className="text-sm text-text-tertiary">© 2025</span>
             </div>
             <div className="flex gap-8 text-sm text-text-secondary">
-              <a href="#" className="transition hover:text-navy">
+              <Link href="/privacy" className="transition hover:text-navy">
                 隐私政策
-              </a>
-              <a href="#" className="transition hover:text-navy">
+              </Link>
+              <Link href="/terms" className="transition hover:text-navy">
                 服务条款
-              </a>
+              </Link>
               <a href="#" className="transition hover:text-navy">
                 联系我们
               </a>

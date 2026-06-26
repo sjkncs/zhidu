@@ -1,33 +1,23 @@
 'use client';
 
-import Link from 'next/link';
 import { Microscope } from 'lucide-react';
+import ResearchManager from '@/components/research/ResearchManager';
 
 export default function ResearchPage() {
   return (
-    <div className="mx-auto max-w-2xl">
-      <div className="rounded-2xl border border-border bg-surface p-12 text-center">
-        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue/10">
-          <Microscope className="h-8 w-8 text-blue" />
+    <div className="mx-auto max-w-6xl space-y-6">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-navy/10">
+          <Microscope className="h-5 w-5 text-navy" />
         </div>
-        <h1 className="text-2xl font-bold text-text-primary">科研</h1>
-        <p className="mt-2 text-text-secondary">
-          科研项目推荐与管理，学术能力提升
-        </p>
-        <div className="mt-8 inline-flex items-center gap-2 rounded-full bg-blue/10 px-5 py-2.5 text-sm font-medium text-blue">
-          <span className="h-2 w-2 rounded-full bg-blue animate-pulse" />
-          即将上线
+        <div>
+          <h1 className="text-xl font-bold text-text-primary">科研</h1>
+          <p className="text-sm text-text-secondary">
+            管理科研项目，追踪学术进展，提升研究能力
+          </p>
         </div>
-        <p className="mt-6 text-sm text-text-tertiary">
-          该模块正在开发中，敬请期待
-        </p>
-        <Link
-          href="/dashboard"
-          className="mt-6 inline-block text-sm text-blue hover:text-blue-dark transition-colors"
-        >
-          &larr; 返回仪表盘
-        </Link>
       </div>
+      <ResearchManager />
     </div>
   );
 }

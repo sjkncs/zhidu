@@ -21,6 +21,10 @@ import type {
   TodoRow,
   DiaryEntryRow,
   MemoRow,
+  ResumeRow,
+  InternshipRow,
+  ResearchProjectRow,
+  TransactionRow,
 } from './index';
 
 // Lazy-initialized client to avoid circular dependency at module load time.
@@ -1907,5 +1911,431 @@ function mapMemo(row: any): MemoRow {
     isArchived: row.is_archived ?? false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+// ─── Resumes ────────────────────────────────────────────────────────────────
+
+export async function createResume(params: {
+  userId: string;
+  title: string;
+  data?: Record<string, unknown>;
+  targetRole?: string;
+}): Promise<ResumeRow | null> {
+  try {
+    const { data, error } = await getDb()
+      .from('resumes')
+      .insert({
+        user_id: params.userId,
+        title: params.title,
+        data: params.data ?? {},
+        target_role: params.targetRole ?? null,
+      })
+      .select()
+      .single();
+    if (error) { console.error('[createResume]', error.message); return null; }
+    return mapResume(data);
+  } catch (err) {
+    console.error('[createResume]', err);
+    return null;
+  }
+}
+
+export async function getUserResumes(userId: string): Promise<ResumeRow[]> {
+  try {
+    const { data, error } = await getDb()
+      .from('resumes')
+      .select('*')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false });
+    if (error) { console.error('[getUserResumes]', error.message); return []; }
+    return (data ?? []).map(mapResume);
+  } catch (err) {
+    console.error('[getUserResumes]', err);
+    return [];
+  }
+}
+
+export async function getResumeById(id: string): Promise<ResumeRow | null> {
+  try {
+    const { data, error } = await getDb()
+      .from('resumes')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) { console.error('[getResumeById]', error.message); return null; }
+    return data ? mapResume(data) : null;
+  } catch (err) {
+    console.error('[getResumeById]', err);
+    return null;
+  }
+}
+
+export async function updateResume(id: string, updates: {
+  title?: string;
+  data?: Record<string, unknown>;
+  targetRole?: string;
+}): Promise<ResumeRow | null> {
+  try {
+    const dbUpdates: Record<string, any> = {};
+    if (updates.title !== undefined) dbUpdates.title = updates.title;
+    if (updates.data !== undefined) dbUpdates.data = updates.data;
+    if (updates.targetRole !== undefined) dbUpdates.target_role = updates.targetRole;
+    const { data, error } = await getDb()
+      .from('resumes')
+      .update(dbUpdates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) { console.error('[updateResume]', error.message); return null; }
+    return mapResume(data);
+  } catch (err) {
+    console.error('[updateResume]', err);
+    return null;
+  }
+}
+
+export async function deleteResume(id: string): Promise<boolean> {
+  try {
+    const { error } = await getDb().from('resumes').delete().eq('id', id);
+    if (error) { console.error('[deleteResume]', error.message); return false; }
+    return true;
+  } catch (err) {
+    console.error('[deleteResume]', err);
+    return false;
+  }
+}
+
+function mapResume(row: any): ResumeRow {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    title: row.title,
+    data: row.data ?? {},
+    targetRole: row.target_role,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+// ─── Internships ────────────────────────────────────────────────────────────
+
+export async function createInternship(params: {
+  userId: string;
+  company: string;
+  role: string;
+  description?: string;
+  startDate: string;
+  endDate?: string;
+  current?: boolean;
+}): Promise<InternshipRow | null> {
+  try {
+    const { data, error } = await getDb()
+      .from('internships')
+      .insert({
+        user_id: params.userId,
+        company: params.company,
+        role: params.role,
+        description: params.description ?? null,
+        start_date: params.startDate,
+        end_date: params.endDate ?? null,
+        current: params.current ?? false,
+      })
+      .select()
+      .single();
+    if (error) { console.error('[createInternship]', error.message); return null; }
+    return mapInternship(data);
+  } catch (err) {
+    console.error('[createInternship]', err);
+    return null;
+  }
+}
+
+export async function getUserInternships(userId: string): Promise<InternshipRow[]> {
+  try {
+    const { data, error } = await getDb()
+      .from('internships')
+      .select('*')
+      .eq('user_id', userId)
+      .order('start_date', { ascending: false });
+    if (error) { console.error('[getUserInternships]', error.message); return []; }
+    return (data ?? []).map(mapInternship);
+  } catch (err) {
+    console.error('[getUserInternships]', err);
+    return [];
+  }
+}
+
+export async function updateInternship(id: string, updates: {
+  company?: string;
+  role?: string;
+  description?: string;
+  startDate?: string;
+  endDate?: string;
+  current?: boolean;
+}): Promise<InternshipRow | null> {
+  try {
+    const dbUpdates: Record<string, any> = {};
+    if (updates.company !== undefined) dbUpdates.company = updates.company;
+    if (updates.role !== undefined) dbUpdates.role = updates.role;
+    if (updates.description !== undefined) dbUpdates.description = updates.description;
+    if (updates.startDate !== undefined) dbUpdates.start_date = updates.startDate;
+    if (updates.endDate !== undefined) dbUpdates.end_date = updates.endDate;
+    if (updates.current !== undefined) dbUpdates.current = updates.current;
+    const { data, error } = await getDb()
+      .from('internships')
+      .update(dbUpdates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) { console.error('[updateInternship]', error.message); return null; }
+    return mapInternship(data);
+  } catch (err) {
+    console.error('[updateInternship]', err);
+    return null;
+  }
+}
+
+export async function deleteInternship(id: string): Promise<boolean> {
+  try {
+    const { error } = await getDb().from('internships').delete().eq('id', id);
+    if (error) { console.error('[deleteInternship]', error.message); return false; }
+    return true;
+  } catch (err) {
+    console.error('[deleteInternship]', err);
+    return false;
+  }
+}
+
+function mapInternship(row: any): InternshipRow {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    company: row.company,
+    role: row.role,
+    description: row.description,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    current: row.current ?? false,
+  };
+}
+
+// ─── Research Projects ──────────────────────────────────────────────────────
+
+export async function createResearchProject(params: {
+  userId: string;
+  title: string;
+  role: string;
+  description?: string;
+  advisor?: string;
+  startDate: string;
+  endDate?: string;
+  status?: 'ONGOING' | 'COMPLETED';
+}): Promise<ResearchProjectRow | null> {
+  try {
+    const { data, error } = await getDb()
+      .from('research_projects')
+      .insert({
+        user_id: params.userId,
+        title: params.title,
+        role: params.role,
+        description: params.description ?? null,
+        advisor: params.advisor ?? null,
+        start_date: params.startDate,
+        end_date: params.endDate ?? null,
+        status: params.status ?? 'ONGOING',
+      })
+      .select()
+      .single();
+    if (error) { console.error('[createResearchProject]', error.message); return null; }
+    return mapResearchProject(data);
+  } catch (err) {
+    console.error('[createResearchProject]', err);
+    return null;
+  }
+}
+
+export async function getUserResearchProjects(userId: string, filters?: {
+  status?: 'ONGOING' | 'COMPLETED';
+}): Promise<ResearchProjectRow[]> {
+  try {
+    let query = getDb()
+      .from('research_projects')
+      .select('*')
+      .eq('user_id', userId);
+    if (filters?.status) query = query.eq('status', filters.status);
+    const { data, error } = await query.order('start_date', { ascending: false });
+    if (error) { console.error('[getUserResearchProjects]', error.message); return []; }
+    return (data ?? []).map(mapResearchProject);
+  } catch (err) {
+    console.error('[getUserResearchProjects]', err);
+    return [];
+  }
+}
+
+export async function updateResearchProject(id: string, updates: {
+  title?: string;
+  role?: string;
+  description?: string;
+  advisor?: string;
+  startDate?: string;
+  endDate?: string;
+  status?: 'ONGOING' | 'COMPLETED';
+}): Promise<ResearchProjectRow | null> {
+  try {
+    const dbUpdates: Record<string, any> = {};
+    if (updates.title !== undefined) dbUpdates.title = updates.title;
+    if (updates.role !== undefined) dbUpdates.role = updates.role;
+    if (updates.description !== undefined) dbUpdates.description = updates.description;
+    if (updates.advisor !== undefined) dbUpdates.advisor = updates.advisor;
+    if (updates.startDate !== undefined) dbUpdates.start_date = updates.startDate;
+    if (updates.endDate !== undefined) dbUpdates.end_date = updates.endDate;
+    if (updates.status !== undefined) dbUpdates.status = updates.status;
+    const { data, error } = await getDb()
+      .from('research_projects')
+      .update(dbUpdates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) { console.error('[updateResearchProject]', error.message); return null; }
+    return mapResearchProject(data);
+  } catch (err) {
+    console.error('[updateResearchProject]', err);
+    return null;
+  }
+}
+
+export async function deleteResearchProject(id: string): Promise<boolean> {
+  try {
+    const { error } = await getDb().from('research_projects').delete().eq('id', id);
+    if (error) { console.error('[deleteResearchProject]', error.message); return false; }
+    return true;
+  } catch (err) {
+    console.error('[deleteResearchProject]', err);
+    return false;
+  }
+}
+
+function mapResearchProject(row: any): ResearchProjectRow {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    title: row.title,
+    role: row.role,
+    description: row.description,
+    advisor: row.advisor,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    status: row.status,
+  };
+}
+
+// ─── Transactions (Finance) ─────────────────────────────────────────────────
+
+export async function createTransaction(params: {
+  userId: string;
+  amount: number;
+  category: string;
+  description?: string;
+  type: 'EXPENSE' | 'INCOME';
+  date?: string;
+}): Promise<TransactionRow | null> {
+  try {
+    const { data, error } = await getDb()
+      .from('transactions')
+      .insert({
+        user_id: params.userId,
+        amount: params.amount,
+        category: params.category,
+        description: params.description ?? null,
+        type: params.type,
+        date: params.date ?? new Date().toISOString().split('T')[0],
+      })
+      .select()
+      .single();
+    if (error) { console.error('[createTransaction]', error.message); return null; }
+    return mapTransaction(data);
+  } catch (err) {
+    console.error('[createTransaction]', err);
+    return null;
+  }
+}
+
+export async function getUserTransactions(userId: string, filters?: {
+  type?: 'EXPENSE' | 'INCOME';
+  category?: string;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+}): Promise<TransactionRow[]> {
+  try {
+    let query = getDb()
+      .from('transactions')
+      .select('*')
+      .eq('user_id', userId);
+    if (filters?.type) query = query.eq('type', filters.type);
+    if (filters?.category) query = query.eq('category', filters.category);
+    if (filters?.startDate) query = query.gte('date', filters.startDate);
+    if (filters?.endDate) query = query.lte('date', filters.endDate);
+    const { data, error } = await query
+      .order('date', { ascending: false })
+      .limit(filters?.limit ?? 200);
+    if (error) { console.error('[getUserTransactions]', error.message); return []; }
+    return (data ?? []).map(mapTransaction);
+  } catch (err) {
+    console.error('[getUserTransactions]', err);
+    return [];
+  }
+}
+
+export async function updateTransaction(id: string, updates: {
+  amount?: number;
+  category?: string;
+  description?: string;
+  type?: 'EXPENSE' | 'INCOME';
+  date?: string;
+}): Promise<TransactionRow | null> {
+  try {
+    const dbUpdates: Record<string, any> = {};
+    if (updates.amount !== undefined) dbUpdates.amount = updates.amount;
+    if (updates.category !== undefined) dbUpdates.category = updates.category;
+    if (updates.description !== undefined) dbUpdates.description = updates.description;
+    if (updates.type !== undefined) dbUpdates.type = updates.type;
+    if (updates.date !== undefined) dbUpdates.date = updates.date;
+    const { data, error } = await getDb()
+      .from('transactions')
+      .update(dbUpdates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) { console.error('[updateTransaction]', error.message); return null; }
+    return mapTransaction(data);
+  } catch (err) {
+    console.error('[updateTransaction]', err);
+    return null;
+  }
+}
+
+export async function deleteTransaction(id: string): Promise<boolean> {
+  try {
+    const { error } = await getDb().from('transactions').delete().eq('id', id);
+    if (error) { console.error('[deleteTransaction]', error.message); return false; }
+    return true;
+  } catch (err) {
+    console.error('[deleteTransaction]', err);
+    return false;
+  }
+}
+
+function mapTransaction(row: any): TransactionRow {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    amount: Number(row.amount),
+    category: row.category,
+    description: row.description,
+    type: row.type,
+    date: row.date,
+    createdAt: row.created_at,
   };
 }

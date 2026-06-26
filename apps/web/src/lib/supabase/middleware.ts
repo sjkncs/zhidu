@@ -29,22 +29,30 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Redirect unauthenticated users from /dashboard to /login
+  const pathname = request.nextUrl.pathname;
+
+  // Protect /api/* routes (except those with their own auth)
+  const apiExceptions = ['/api/ai/chat', '/api/knowledge/seed'];
   if (
     !user &&
-    request.nextUrl.pathname.startsWith('/dashboard')
+    pathname.startsWith('/api/') &&
+    !apiExceptions.some((exc) => pathname === exc || pathname.startsWith(exc + '/'))
   ) {
+    return NextResponse.json({ error: '未登录' }, { status: 401 });
+  }
+
+  // Redirect unauthenticated users from /dashboard to /login
+  if (!user && pathname.startsWith('/dashboard')) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = '/login';
-    redirectUrl.searchParams.set('redirect', request.nextUrl.pathname);
+    redirectUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(redirectUrl);
   }
 
   // Redirect authenticated users from /login or /register to /dashboard
   if (
     user &&
-    (request.nextUrl.pathname === '/login' ||
-      request.nextUrl.pathname === '/register')
+    (pathname === '/login' || pathname === '/register')
   ) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = '/dashboard';

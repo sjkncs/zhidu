@@ -67,23 +67,23 @@ const modules: ModuleInfo[] = [
   {
     icon: FileText,
     title: '简历',
-    description: 'AI 辅助生成专业简历，一键导出',
+    description: 'AI 辅助生成专业简历，支持智能填充与在线预览',
     href: '/dashboard/resume',
-    status: 'coming_soon',
+    status: 'active',
   },
   {
     icon: Briefcase,
     title: '实习',
-    description: '匹配优质实习机会，积累实践经验',
+    description: '管理实习经历，积累实践经验',
     href: '/dashboard/internship',
-    status: 'coming_soon',
+    status: 'active',
   },
   {
     icon: Microscope,
     title: '科研',
-    description: '科研项目推荐与管理，学术能力提升',
+    description: '管理科研项目，追踪学术进展',
     href: '/dashboard/research',
-    status: 'coming_soon',
+    status: 'active',
   },
   {
     icon: BookMarked,
@@ -111,7 +111,7 @@ const modules: ModuleInfo[] = [
     title: '财务',
     description: '收支记录与预算管理，培养理财习惯',
     href: '/dashboard/finance',
-    status: 'coming_soon',
+    status: 'active',
   },
 ];
 
@@ -186,6 +186,22 @@ export function QuickActions() {
         >
           <StickyNote className="h-4 w-4" />
           <span>添加备忘</span>
+        </button>
+        <button
+          onClick={() => router.push('/dashboard/resume')}
+          className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm text-text-secondary transition-colors hover:bg-surface-elevated hover:text-text-primary"
+        >
+          <FileText className="h-4 w-4" />
+          <span>创建简历</span>
+          <Badge color="blue">新</Badge>
+        </button>
+        <button
+          onClick={() => router.push('/dashboard/finance')}
+          className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm text-text-secondary transition-colors hover:bg-surface-elevated hover:text-text-primary"
+        >
+          <Wallet className="h-4 w-4" />
+          <span>记录收支</span>
+          <Badge color="blue">新</Badge>
         </button>
       </div>
     </div>

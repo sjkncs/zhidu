@@ -23,11 +23,11 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
-    'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 focus-visible:ring-blue-500 disabled:bg-blue-300',
+    'bg-blue text-white hover:bg-blue/90 active:bg-blue/80 focus-visible:ring-blue disabled:bg-blue/40',
   secondary:
-    'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 active:bg-gray-100 focus-visible:ring-gray-400 disabled:bg-gray-100 disabled:text-gray-400',
+    'bg-surface text-text-primary border border-border hover:bg-surface-elevated active:bg-surface-elevated focus-visible:ring-border disabled:bg-surface-elevated disabled:text-text-tertiary',
   ghost:
-    'bg-transparent text-gray-600 hover:bg-gray-100 active:bg-gray-200 focus-visible:ring-gray-400 disabled:text-gray-300',
+    'bg-transparent text-text-secondary hover:bg-surface-elevated active:bg-surface-elevated focus-visible:ring-border disabled:text-text-tertiary',
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
@@ -88,7 +88,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
     <div
       ref={ref}
       className={[
-        'bg-white border border-gray-200 rounded-xl overflow-hidden',
+        'bg-surface border border-border rounded-xl overflow-hidden',
         noPadding ? '' : 'p-4',
         className,
       ].filter(Boolean).join(' ')}
@@ -108,7 +108,7 @@ export const CardHeader = React.forwardRef<HTMLDivElement, CardHeaderProps>(
   ({ className = '', children, ...rest }, ref) => (
     <div
       ref={ref}
-      className={['px-4 py-3 border-b border-gray-100', className].filter(Boolean).join(' ')}
+      className={['px-4 py-3 border-b border-border', className].filter(Boolean).join(' ')}
       {...rest}
     >
       {children}
@@ -142,7 +142,7 @@ export const CardFooter = React.forwardRef<HTMLDivElement, CardFooterProps>(
   ({ className = '', children, ...rest }, ref) => (
     <div
       ref={ref}
-      className={['px-4 py-3 border-t border-gray-100 flex items-center gap-2', className].filter(Boolean).join(' ')}
+      className={['px-4 py-3 border-t border-border flex items-center gap-2', className].filter(Boolean).join(' ')}
       {...rest}
     >
       {children}
@@ -186,14 +186,14 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="text-sm font-medium text-gray-700"
+            className="text-sm font-medium text-text-primary"
           >
             {label}
           </label>
         )}
         <div className="relative flex items-center">
           {leftIcon && (
-            <span className="absolute left-3 text-gray-400 pointer-events-none flex items-center">
+            <span className="absolute left-3 text-text-tertiary pointer-events-none flex items-center">
               {leftIcon}
             </span>
           )}
@@ -203,12 +203,12 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             aria-invalid={hasError}
             aria-describedby={hasError ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined}
             className={[
-              'w-full rounded-lg border bg-white transition-colors duration-150',
-              'placeholder:text-gray-400',
+              'w-full rounded-lg border bg-surface transition-colors duration-150',
+              'placeholder:text-text-tertiary',
               'focus:outline-none focus:ring-2 focus:ring-offset-1 focus:border-transparent',
               hasError
                 ? 'border-red-400 focus:ring-red-400'
-                : 'border-gray-300 focus:ring-blue-500',
+                : 'border-border focus:ring-blue',
               inputSizeClasses[size],
               leftIcon ? 'pl-9' : '',
               rightIcon ? 'pr-9' : '',
@@ -217,7 +217,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             {...rest}
           />
           {rightIcon && (
-            <span className="absolute right-3 text-gray-400 pointer-events-none flex items-center">
+            <span className="absolute right-3 text-text-tertiary pointer-events-none flex items-center">
               {rightIcon}
             </span>
           )}
@@ -228,7 +228,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           </p>
         )}
         {!hasError && hint && (
-          <p id={`${inputId}-hint`} className="text-xs text-gray-500">
+          <p id={`${inputId}-hint`} className="text-xs text-text-secondary">
             {hint}
           </p>
         )}
@@ -257,12 +257,12 @@ const badgeLightClasses: Record<BadgeColor, string> = {
   green:  'bg-green-50 text-green-700 border-green-200',
   red:    'bg-red-50 text-red-700 border-red-200',
   yellow: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-  gray:   'bg-gray-50 text-gray-700 border-gray-200',
+  gray:   'bg-surface-elevated text-text-primary border-border',
   purple: 'bg-purple-50 text-purple-700 border-purple-200',
 };
 
 const badgeSolidClasses: Record<BadgeColor, string> = {
-  blue:   'bg-blue-600 text-white border-blue-600',
+  blue:   'bg-blue text-white border-blue',
   green:  'bg-green-600 text-white border-green-600',
   red:    'bg-red-600 text-white border-red-600',
   yellow: 'bg-yellow-500 text-white border-yellow-500',
@@ -355,7 +355,7 @@ export const ModuleCard = React.forwardRef<HTMLDivElement, ModuleCardProps>(
         aria-label={`${title} — ${label}`}
         className={[
           'relative flex flex-col gap-3 p-4 rounded-2xl border transition-all duration-150',
-          'bg-white border-gray-200',
+          'bg-surface border-border',
           isClickable ? 'cursor-pointer hover:border-blue-300 hover:shadow-sm active:scale-[0.98]' : 'cursor-default opacity-75',
           className,
         ].filter(Boolean).join(' ')}
@@ -363,7 +363,7 @@ export const ModuleCard = React.forwardRef<HTMLDivElement, ModuleCardProps>(
       >
         {/* 顶部：图标 + 状态 + 徽章 */}
         <div className="flex items-start justify-between gap-2">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 text-xl">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue/10 text-blue text-xl">
             {icon}
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -372,7 +372,7 @@ export const ModuleCard = React.forwardRef<HTMLDivElement, ModuleCardProps>(
                 {badge > 99 ? '99+' : badge}
               </span>
             )}
-            <span className="flex items-center gap-1.5 text-xs text-gray-500">
+            <span className="flex items-center gap-1.5 text-xs text-text-secondary">
               <span className={`h-2 w-2 rounded-full ${dotColor}`} aria-hidden="true" />
               {label}
             </span>
@@ -381,20 +381,20 @@ export const ModuleCard = React.forwardRef<HTMLDivElement, ModuleCardProps>(
 
         {/* 标题 + 描述 */}
         <div className="flex flex-col gap-0.5 min-w-0">
-          <h3 className="text-sm font-semibold text-gray-900 truncate">{title}</h3>
-          <p className="text-xs text-gray-500 line-clamp-2">{description}</p>
+          <h3 className="text-sm font-semibold text-text-primary truncate">{title}</h3>
+          <p className="text-xs text-text-secondary line-clamp-2">{description}</p>
         </div>
 
         {/* 进度条（可选） */}
         {progress !== undefined && (
           <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between text-xs text-gray-500">
+            <div className="flex items-center justify-between text-xs text-text-secondary">
               <span>进度</span>
               <span>{Math.round(progress * 100)}%</span>
             </div>
-            <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
+            <div className="h-1.5 w-full rounded-full bg-surface-elevated overflow-hidden">
               <div
-                className="h-full rounded-full bg-blue-500 transition-all duration-300"
+                className="h-full rounded-full bg-blue transition-all duration-300"
                 style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }}
                 role="progressbar"
                 aria-valuenow={Math.round(progress * 100)}

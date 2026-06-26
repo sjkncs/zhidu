@@ -30,6 +30,7 @@ interface NavItem {
   icon: IconComponent;
   label: string;
   href: string;
+  stub?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -112,6 +113,11 @@ function Sidebar({
                   >
                     <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
                     <span>{item.label}</span>
+                    {item.stub && (
+                      <span className="bg-amber-500/10 text-amber-600 text-[10px] px-1.5 py-0.5 rounded">
+                        即将
+                      </span>
+                    )}
                   </Link>
                 </li>
               );
