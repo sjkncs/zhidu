@@ -1,32 +1,78 @@
 'use client';
 
-import Link from 'next/link';
-import { TreePine } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { TreePine, Sparkles, ListTree } from 'lucide-react';
+import SkillTreeExplorer from '@/components/skills/SkillTreeExplorer';
+import SkillTreeGenerator from '@/components/skills/SkillTreeGenerator';
+
+type TabKey = 'explore' | 'generate';
+
+interface Tab {
+  key: TabKey;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+const tabs: Tab[] = [
+  { key: 'explore', label: '我的技能树', icon: ListTree },
+  { key: 'generate', label: '生成 & 模板', icon: Sparkles },
+];
 
 export default function SkillsPage() {
+  const [activeTab, setActiveTab] = useState<TabKey>('explore');
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const handleTreeCreated = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+    setActiveTab('explore');
+  }, []);
+
   return (
-    <div className="mx-auto max-w-2xl">
-      <div className="rounded-2xl border border-border bg-surface p-12 text-center">
-        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue/10">
-          <TreePine className="h-8 w-8 text-blue" />
+    <div className="mx-auto max-w-6xl space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-navy/10">
+          <TreePine className="h-5 w-5 text-navy" />
         </div>
-        <h1 className="text-2xl font-bold text-text-primary">技能树</h1>
-        <p className="mt-2 text-text-secondary">
-          可视化技能成长路径，追踪学习进度
-        </p>
-        <div className="mt-8 inline-flex items-center gap-2 rounded-full bg-blue/10 px-5 py-2.5 text-sm font-medium text-blue">
-          <span className="h-2 w-2 rounded-full bg-blue animate-pulse" />
-          即将上线
+        <div>
+          <h1 className="text-xl font-bold text-text-primary">技能树</h1>
+          <p className="text-sm text-text-secondary">
+            可视化技能成长路径，追踪学习进度，AI 智能推荐学习路线
+          </p>
         </div>
-        <p className="mt-6 text-sm text-text-tertiary">
-          该模块正在开发中，敬请期待
-        </p>
-        <Link
-          href="/dashboard"
-          className="mt-6 inline-block text-sm text-blue hover:text-blue-dark transition-colors"
-        >
-          &larr; 返回仪表盘
-        </Link>
+      </div>
+
+      {/* Tab navigation */}
+      <div className="flex gap-1 rounded-xl border border-border bg-surface p-1">
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={[
+                'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors',
+                isActive
+                  ? 'bg-blue text-white shadow-sm'
+                  : 'text-text-secondary hover:bg-surface-elevated hover:text-text-primary',
+              ].join(' ')}
+            >
+              <Icon className="h-4 w-4" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Tab content */}
+      <div key={refreshKey}>
+        {activeTab === 'explore' && (
+          <SkillTreeExplorer onTreeCreated={handleTreeCreated} />
+        )}
+        {activeTab === 'generate' && (
+          <SkillTreeGenerator onTreeCreated={handleTreeCreated} />
+        )}
       </div>
     </div>
   );

@@ -443,6 +443,93 @@ export interface CareerPathAIResult {
   paths: CareerPathAIItem[];
 }
 
+/**
+ * 构建技能树生成 Prompt（JSON 结构化输出，配合 chatJSON 使用）
+ */
+export function buildSkillTreePrompt(params: {
+  major: string;
+  careerDirection?: string;
+}): ChatMessage[] {
+  return [
+    {
+      role: 'system',
+      content: `你是"智渡"平台的技能规划师 AI。你的任务是根据用户的专业方向和职业目标，生成一棵结构化的技能树。
+
+【输出要求】
+你必须且只能输出一个 JSON 对象，格式如下：
+
+{
+  "treeName": "技能树名称",
+  "treeDescription": "一句话描述",
+  "category": "TECH 或 SOFT 或 LANGUAGE 或 CERTIFICATE",
+  "nodes": [
+    {
+      "title": "技能名称",
+      "description": "技能简述及学习要点",
+      "difficulty": 3,
+      "estimatedHours": 40,
+      "prerequisites": [],
+      "resources": [
+        { "type": "course", "title": "推荐课程名", "url": "https://..." }
+      ],
+      "children": [
+        {
+          "title": "子技能名称",
+          "description": "描述",
+          "difficulty": 4,
+          "estimatedHours": 60,
+          "prerequisites": ["父技能名称"],
+          "resources": [],
+          "children": []
+        }
+      ]
+    }
+  ]
+}
+
+【生成规则】
+1. 技能树应包含 3-5 个主干分支（nodes 顶层元素），每个分支下有 2-4 个子技能
+2. difficulty 为 1-5（1=入门，5=精通），子技能应比父技能难度高或持平
+3. estimatedHours 为该技能的预估学习时长（小时）
+4. prerequisites 列出前置技能名称（字符串数组），根节点为空数组
+5. resources 列出 1-2 个学习资源，type 可选: course/book/tutorial/project/practice
+6. 技能名称要具体（如"React Hooks"而非"前端框架"），便于后续追踪进度
+7. 整棵树应覆盖该方向从入门到就业所需的核心技能`,
+    },
+    {
+      role: 'user',
+      content: `请为以下方向生成技能树：
+- 专业/方向：${params.major}${params.careerDirection ? `\n- 职业目标：${params.careerDirection}` : ''}
+
+请严格按 JSON 格式输出。`,
+    },
+  ];
+}
+
+/** 技能树 AI 输出的 TypeScript 类型 */
+export interface SkillTreeAIResource {
+  type: string;
+  title: string;
+  url?: string;
+}
+
+export interface SkillTreeAINode {
+  title: string;
+  description: string;
+  difficulty: number;
+  estimatedHours: number;
+  prerequisites: string[];
+  resources: SkillTreeAIResource[];
+  children: SkillTreeAINode[];
+}
+
+export interface SkillTreeAIResult {
+  treeName: string;
+  treeDescription: string;
+  category: string;
+  nodes: SkillTreeAINode[];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 导出
 // ─────────────────────────────────────────────────────────────────────────────

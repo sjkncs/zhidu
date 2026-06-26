@@ -227,25 +227,38 @@ export interface CourseRow {
 /** 技能树表（知识图谱节点组） */
 export interface SkillTreeRow {
   id: string;
+  userId: string;
   name: string;
   description?: string;
-  /** 所属模块 */
-  module: string;
+  /** 分类: TECH, SOFT, LANGUAGE, CERTIFICATE, CUSTOM */
+  category: string;
+  sourceMajor?: string;
+  sourceCareer?: string;
+  aiGenerated: boolean;
   createdAt: string;
+  updatedAt: string;
 }
 
 /** 技能节点表（技能树中的单个知识点） */
 export interface SkillNodeRow {
   id: string;
   skillTreeId: string;
+  parentNodeId?: string;
   title: string;
   description?: string;
-  /** 前置节点（依赖） */
-  prerequisites?: string[];
   /** 难度 1-5 */
   difficulty: number;
-  /** 用户进度 0-1 */
-  progress?: number;
+  /** 用户进度 0-100 */
+  progress: number;
+  prerequisites?: string[];
+  resources?: any[];
+  estimatedHours?: number;
+  completed: boolean;
+  completedAt?: string;
+  sortOrder: number;
+  depth: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** 笔记表 */

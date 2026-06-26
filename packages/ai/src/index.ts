@@ -546,6 +546,7 @@ export {
   buildVolunteerAnalysisPrompt,
   buildMajorComparisonPrompt,
   buildCareerPathPrompt,
+  buildSkillTreePrompt,
 } from './llm-service';
 export type {
   ChatMessage,
@@ -553,6 +554,9 @@ export type {
   CareerPathAIResult,
   CareerPathAIItem,
   CareerPathAIGoal,
+  SkillTreeAIResult,
+  SkillTreeAINode,
+  SkillTreeAIResource,
 } from './llm-service';
 
 // Re-export chunker
