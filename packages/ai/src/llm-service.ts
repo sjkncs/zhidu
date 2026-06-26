@@ -356,33 +356,91 @@ export function buildMajorComparisonPrompt(majors: string[], context?: string): 
 }
 
 /**
- * 构建职业路径分析 Prompt
+ * 构建职业路径分析 Prompt（JSON 结构化输出，配合 chatJSON 使用）
+ *
+ * 返回的 ChatMessage[] 将由 chatJSON<CareerPathAIResult>() 调用，
+ * LLM 必须严格按 JSON Schema 输出，不得包含额外文字。
  */
 export function buildCareerPathPrompt(params: {
   major: string;
   mbtiType?: string;
   hollandCode?: string;
 }): ChatMessage[] {
+  const personalityContext = [
+    params.mbtiType ? `MBTI 类型: ${params.mbtiType}` : null,
+    params.hollandCode ? `霍兰德代码: ${params.hollandCode}` : null,
+  ].filter(Boolean).join('，');
+
   return [
     {
       role: 'system',
-      content: `你是"智渡"平台的生涯规划师。基于专业方向和个人测评结果，生成详细的职业发展路径：
-1. 核心职业方向（3-5 个）
-2. 每个方向的典型岗位和薪资范围
-3. 短期目标（大学期间）
-4. 中期目标（毕业 3-5 年）
-5. 长期目标（10 年+）
-6. 需要补充的技能和证书
-7. 行业趋势分析`,
+      content: `你是"智渡"平台的资深生涯规划师 AI。你的任务是根据用户的专业方向和个人测评结果，生成 3-5 条结构化职业发展路径。
+
+【输出要求】
+你必须且只能输出一个 JSON 对象，格式如下（不要输出任何其他文字）：
+
+{
+  "paths": [
+    {
+      "targetRole": "目标岗位名称（如：算法工程师、产品经理）",
+      "targetIndustry": "所属行业（如：人工智能、金融科技、教育科技）",
+      "salaryRange": "薪资范围（如：15K-30K/月，入职 3 年后 25K-50K/月）",
+      "requiredSkills": ["核心技能1", "核心技能2", "核心技能3", "核心技能4", "核心技能5"],
+      "shortTermGoals": [
+        { "title": "目标标题", "description": "具体行动描述", "deadline": "建议完成时间（如：大二下学期）" }
+      ],
+      "midTermGoals": [
+        { "title": "目标标题", "description": "具体行动描述", "deadline": "建议完成时间（如：毕业后 2 年）" }
+      ],
+      "longTermGoals": [
+        { "title": "目标标题", "description": "具体行动描述", "deadline": "建议完成时间（如：毕业后 8-10 年）" }
+      ],
+      "industryTrends": "该方向 2-3 句话的行业趋势分析",
+      "matchScore": 85
+    }
+  ]
+}
+
+【生成规则】
+1. 每条路径的 targetRole 必须不同，覆盖该专业的主要就业/深造方向
+2. matchScore 是 0-100 的整数，表示该路径与用户专业和测评结果的匹配程度
+3. requiredSkills 列出 4-6 个核心技能，按重要性排序
+4. shortTermGoals = 大学期间（2-3 条），midTermGoals = 毕业后 1-5 年（2-3 条），longTermGoals = 5-10 年+（1-2 条）
+5. salaryRange 基于 2024-2025 年中国市场实际数据，区分起步和成长阶段
+6. industryTrends 要具体，提及技术趋势、市场需求变化、政策影响等
+${personalityContext ? `7. 结合用户的测评结果（${personalityContext}）调整路径推荐和 matchScore` : ''}`,
     },
     {
       role: 'user',
-      content: `请为我规划职业路径：
-- 专业方向：${params.major}
-${params.mbtiType ? `- MBTI 类型：${params.mbtiType}` : ''}
-${params.hollandCode ? `- 霍兰德代码：${params.hollandCode}` : ''}`,
+      content: `请为以下学生生成职业发展路径：
+- 专业方向：${params.major}${personalityContext ? `\n- 个人测评：${personalityContext}` : ''}
+
+请严格按 JSON 格式输出 3-5 条路径。`,
     },
   ];
+}
+
+/** 职业路径 AI 输出的 TypeScript 类型 */
+export interface CareerPathAIGoal {
+  title: string;
+  description: string;
+  deadline: string;
+}
+
+export interface CareerPathAIItem {
+  targetRole: string;
+  targetIndustry: string;
+  salaryRange: string;
+  requiredSkills: string[];
+  shortTermGoals: CareerPathAIGoal[];
+  midTermGoals: CareerPathAIGoal[];
+  longTermGoals: CareerPathAIGoal[];
+  industryTrends: string;
+  matchScore: number;
+}
+
+export interface CareerPathAIResult {
+  paths: CareerPathAIItem[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

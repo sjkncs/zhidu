@@ -547,7 +547,13 @@ export {
   buildMajorComparisonPrompt,
   buildCareerPathPrompt,
 } from './llm-service';
-export type { ChatMessage, LLMConfig } from './llm-service';
+export type {
+  ChatMessage,
+  LLMConfig,
+  CareerPathAIResult,
+  CareerPathAIItem,
+  CareerPathAIGoal,
+} from './llm-service';
 
 // Re-export chunker
 export { chunkText, chunkDocuments } from './chunker';

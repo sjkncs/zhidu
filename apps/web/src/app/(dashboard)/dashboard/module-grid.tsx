@@ -40,7 +40,7 @@ const modules: ModuleInfo[] = [
     title: '生涯规划',
     description: '探索职业方向，制定个人成长路线图',
     href: '/dashboard/career',
-    status: 'coming_soon',
+    status: 'active',
   },
   {
     icon: BookOpen,
@@ -149,6 +149,14 @@ export function QuickActions() {
           <Target className="h-4 w-4" />
           <span>开始志愿填报</span>
           <Badge color="green">推荐</Badge>
+        </button>
+        <button
+          onClick={() => router.push('/dashboard/career')}
+          className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm text-text-secondary transition-colors hover:bg-surface-elevated hover:text-text-primary"
+        >
+          <Compass className="h-4 w-4" />
+          <span>生涯规划</span>
+          <Badge color="blue">新</Badge>
         </button>
         <button
           onClick={() => router.push('/dashboard/knowledge')}

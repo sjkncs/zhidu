@@ -1,32 +1,83 @@
 'use client';
 
-import Link from 'next/link';
-import { Compass } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Compass, Target, BookOpen, Map } from 'lucide-react';
+import CareerExplorer from '@/components/career/CareerExplorer';
+import GoalManager from '@/components/career/GoalManager';
+import PlanningTemplates from '@/components/career/PlanningTemplates';
+
+type TabKey = 'explore' | 'goals' | 'templates';
+
+interface Tab {
+  key: TabKey;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+const tabs: Tab[] = [
+  { key: 'explore', label: '职业探索', icon: Compass },
+  { key: 'goals', label: '目标管理', icon: Target },
+  { key: 'templates', label: '规划模板', icon: BookOpen },
+];
 
 export default function CareerPage() {
+  const [activeTab, setActiveTab] = useState<TabKey>('explore');
+  const [goalRefreshKey, setGoalRefreshKey] = useState(0);
+
+  const handleGoalsCreated = useCallback(() => {
+    setGoalRefreshKey((k) => k + 1);
+    setActiveTab('goals');
+  }, []);
+
   return (
-    <div className="mx-auto max-w-2xl">
-      <div className="rounded-2xl border border-border bg-surface p-12 text-center">
-        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue/10">
-          <Compass className="h-8 w-8 text-blue" />
+    <div className="mx-auto max-w-5xl space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-navy/10">
+          <Map className="h-5 w-5 text-navy" />
         </div>
-        <h1 className="text-2xl font-bold text-text-primary">生涯规划</h1>
-        <p className="mt-2 text-text-secondary">
-          探索职业方向，制定个人成长路线图
-        </p>
-        <div className="mt-8 inline-flex items-center gap-2 rounded-full bg-blue/10 px-5 py-2.5 text-sm font-medium text-blue">
-          <span className="h-2 w-2 rounded-full bg-blue animate-pulse" />
-          即将上线
+        <div>
+          <h1 className="text-xl font-bold text-text-primary">生涯规划</h1>
+          <p className="text-sm text-text-secondary">
+            探索职业方向，分解目标，制定个人成长路线图
+          </p>
         </div>
-        <p className="mt-6 text-sm text-text-tertiary">
-          该模块正在开发中，敬请期待
-        </p>
-        <Link
-          href="/dashboard"
-          className="mt-6 inline-block text-sm text-blue hover:text-blue-dark transition-colors"
-        >
-          &larr; 返回仪表盘
-        </Link>
+      </div>
+
+      {/* Tab navigation */}
+      <div className="flex gap-1 rounded-xl border border-border bg-surface p-1">
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={[
+                'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors',
+                isActive
+                  ? 'bg-blue text-white shadow-sm'
+                  : 'text-text-secondary hover:bg-surface-elevated hover:text-text-primary',
+              ].join(' ')}
+            >
+              <Icon className="h-4 w-4" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Tab content */}
+      <div>
+        {activeTab === 'explore' && (
+          <CareerExplorer onGoalsCreated={handleGoalsCreated} />
+        )}
+        {activeTab === 'goals' && (
+          <GoalManager refreshKey={goalRefreshKey} />
+        )}
+        {activeTab === 'templates' && (
+          <PlanningTemplates onTemplateApplied={handleGoalsCreated} />
+        )}
       </div>
     </div>
   );

@@ -162,8 +162,26 @@ export interface CareerPathRow {
   targetIndustry?: string;
   /** 当前阶段 */
   stage: 'EXPLORING' | 'PLANNING' | 'PREPARING' | 'ACTIVE';
-  /** 路径节点（JSON 序列化的步骤列表） */
-  milestones?: Array<{ title: string; completed: boolean; deadline?: string }>;
+  /** 薪资范围 */
+  salaryRange?: string;
+  /** 所需技能列表 */
+  requiredSkills?: string[];
+  /** 短期目标 */
+  shortTermGoals?: Array<{ title: string; description?: string }>;
+  /** 中期目标 */
+  midTermGoals?: Array<{ title: string; description?: string }>;
+  /** 长期目标 */
+  longTermGoals?: Array<{ title: string; description?: string }>;
+  /** 行业趋势 */
+  industryTrends?: string;
+  /** 匹配分数 */
+  matchScore?: number;
+  /** 来源专业 */
+  sourceMajor?: string;
+  /** 来源 MBTI 类型 */
+  sourceMbti?: string;
+  /** 来源 Holland 类型 */
+  sourceHolland?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -172,6 +190,8 @@ export interface CareerPathRow {
 export interface GoalRow {
   id: string;
   userId: string;
+  /** 父目标 ID（支持最多 3 层层级） */
+  parentGoalId?: string;
   title: string;
   description?: string;
   /** 目标类别 */
@@ -180,6 +200,12 @@ export interface GoalRow {
   priority?: number;
   completed: boolean;
   deadline?: string;
+  /** 层级深度（1-3） */
+  depth: number;
+  /** 排序权重 */
+  sortOrder: number;
+  /** 关联职业路径 ID */
+  careerPathId?: string;
   createdAt: string;
   updatedAt: string;
 }
