@@ -366,3 +366,12 @@ export const PROMPT_TEMPLATES = {
 // Re-export rule engine
 export { createRuleEngine } from './rule-engine';
 export type { ScoreStats, CandidateItem, AdmissionRecord } from './rule-engine';
+
+// Re-export LLM service
+export {
+  createLLMService,
+  buildVolunteerAnalysisPrompt,
+  buildMajorComparisonPrompt,
+  buildCareerPathPrompt,
+} from './llm-service';
+export type { ChatMessage, LLMConfig } from './llm-service';
