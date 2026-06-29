@@ -144,7 +144,7 @@ BEGIN
     GREATEST(
       similarity(kc.content, query_text),
       word_similarity(query_text, kc.content)
-    ) AS similarity_score
+    )::double precision AS similarity_score
   FROM knowledge_chunks kc
   JOIN knowledge_documents kd ON kd.id = kc.document_id
   WHERE (
