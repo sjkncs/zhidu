@@ -210,18 +210,50 @@ export interface GoalRow {
   updatedAt: string;
 }
 
-/** 课程表 */
+/** 课程表 — 大学课程管理与成绩追踪 */
 export interface CourseRow {
   id: string;
-  title: string;
-  /** 所属模块 */
-  module: string;
-  /** 难度 1-5 */
-  difficulty: number;
-  /** 内容（Markdown） */
-  content?: string;
-  tags?: string[];
+  userId: string;
+  /** 课程名称 */
+  name: string;
+  /** 学分 */
+  credit: number;
+  /** 百分制成绩 0-100 */
+  grade?: number;
+  /** 绩点 0-5.0（自动从百分制换算） */
+  gradePoint?: number;
+  /** 学期（如 "2025-2026-1"） */
+  semester?: string;
+  /** 课程类别 */
+  category: '必修' | '选修' | '公选' | '体育' | '通识';
+  /** 授课教师 */
+  teacher?: string;
+  /** 备注 */
+  notes?: string;
   createdAt: string;
+  updatedAt: string;
+}
+
+/** 学期表 */
+export interface SemesterRow {
+  id: string;
+  userId: string;
+  /** 学期名称（如 "2025-2026 第一学期"） */
+  name: string;
+  startDate?: string;
+  endDate?: string;
+  isCurrent: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 学业统计（calculate_gpa 函数返回） */
+export interface AcademicSummaryRow {
+  gpa: number;
+  weightedAvg: number;
+  totalCredits: number;
+  earnedCredits: number;
+  courseCount: number;
 }
 
 /** 技能树表（知识图谱节点组） */
@@ -478,6 +510,7 @@ export interface Database {
       career_paths: { Row: CareerPathRow };
       goals: { Row: GoalRow };
       courses: { Row: CourseRow };
+      semesters: { Row: SemesterRow };
       skill_trees: { Row: SkillTreeRow };
       skill_nodes: { Row: SkillNodeRow };
       notes: { Row: NoteRow };

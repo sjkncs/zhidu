@@ -9,6 +9,7 @@ import {
   BookOpen,
   MessageSquare,
   TreePine,
+  GraduationCap,
   FileText,
   Briefcase,
   Microscope,
@@ -62,6 +63,13 @@ const modules: ModuleInfo[] = [
     title: '技能树',
     description: '可视化技能成长路径，追踪学习进度',
     href: '/dashboard/skills',
+    status: 'active',
+  },
+  {
+    icon: GraduationCap,
+    title: '学业',
+    description: '课程成绩追踪、GPA 计算与学业进度管理',
+    href: '/dashboard/academic',
     status: 'active',
   },
   {
@@ -201,6 +209,13 @@ export function QuickActions() {
         >
           <Wallet className="h-4 w-4" />
           <span>记录收支</span>
+        </button>
+        <button
+          onClick={() => router.push('/dashboard/academic')}
+          className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm text-text-secondary transition-colors hover:bg-surface-elevated hover:text-text-primary"
+        >
+          <GraduationCap className="h-4 w-4" />
+          <span>添加课程</span>
           <Badge color="blue">新</Badge>
         </button>
       </div>

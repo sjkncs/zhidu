@@ -7,7 +7,7 @@ import { ModuleGrid, QuickActions } from './module-grid';
 interface Stats {
   volunteerPlans: number | null;
   skillTrees: number | null;
-  knowledgeBookmarks: string;
+  gpa: string;
   diaryStreak: number | null;
 }
 
@@ -48,7 +48,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats>({
     volunteerPlans: null,
     skillTrees: null,
-    knowledgeBookmarks: '-',
+    gpa: '-',
     diaryStreak: null,
   });
 
@@ -56,12 +56,13 @@ export default function DashboardPage() {
     let cancelled = false;
 
     async function fetchStats() {
-      const next: Stats = { ...stats };
+      const next: Stats = { volunteerPlans: 0, skillTrees: 0, gpa: '-', diaryStreak: 0 };
 
-      const [plansRes, treesRes, diaryRes] = await Promise.allSettled([
+      const [plansRes, treesRes, diaryRes, academicRes] = await Promise.allSettled([
         fetch('/api/volunteer/plans'),
         fetch('/api/skills/trees'),
         fetch('/api/diary'),
+        fetch('/api/academic/summary'),
       ]);
 
       if (!cancelled) {
@@ -72,8 +73,6 @@ export default function DashboardPage() {
           } catch {
             next.volunteerPlans = 0;
           }
-        } else {
-          next.volunteerPlans = 0;
         }
 
         if (treesRes.status === 'fulfilled' && treesRes.value.ok) {
@@ -83,11 +82,17 @@ export default function DashboardPage() {
           } catch {
             next.skillTrees = 0;
           }
-        } else {
-          next.skillTrees = 0;
         }
 
-        next.knowledgeBookmarks = '-';
+        if (academicRes.status === 'fulfilled' && academicRes.value.ok) {
+          try {
+            const data = await academicRes.value.json();
+            const summary = data.data?.summary;
+            next.gpa = summary?.courseCount > 0 ? summary.gpa.toFixed(2) : '-';
+          } catch {
+            next.gpa = '-';
+          }
+        }
 
         if (diaryRes.status === 'fulfilled' && diaryRes.value.ok) {
           try {
@@ -97,8 +102,6 @@ export default function DashboardPage() {
           } catch {
             next.diaryStreak = 0;
           }
-        } else {
-          next.diaryStreak = 0;
         }
 
         setStats(next);
@@ -139,13 +142,13 @@ export default function DashboardPage() {
           <p className="mt-1 text-xs text-text-secondary">开始创建你的第一个方案</p>
         </div>
         <div className="rounded-xl border border-border bg-surface p-4">
-          <p className="text-xs font-medium text-text-tertiary">知识收藏</p>
+          <p className="text-xs font-medium text-text-tertiary">GPA</p>
           {isLoading ? (
             <div className="mt-1 h-8 w-12 animate-pulse rounded bg-surface-elevated" />
           ) : (
-            <p className="mt-1 text-2xl font-bold text-text-primary">{stats.knowledgeBookmarks}</p>
+            <p className="mt-1 text-2xl font-bold text-text-primary">{stats.gpa}</p>
           )}
-          <p className="mt-1 text-xs text-text-secondary">探索院校与专业信息</p>
+          <p className="mt-1 text-xs text-text-secondary">学业成绩总览</p>
         </div>
         <div className="rounded-xl border border-border bg-surface p-4">
           <p className="text-xs font-medium text-text-tertiary">技能点数</p>
