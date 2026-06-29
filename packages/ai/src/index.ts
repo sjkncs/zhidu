@@ -239,23 +239,60 @@ export interface IntentResult {
 /**
  * IntentRouter — 根据用户查询识别意图并路由到对应服务
  *
- * 意图识别策略（Phase 3）：
- * - 关键词匹配 → 快速路由
- * - 后续可升级为小模型分类
+ * 意图识别策略（Phase 13）：
+ * - 关键词匹配 → 快速路由（置信度 ≥ 0.7 时直接使用）
+ * - LLM 意图分类 → 精准路由（置信度 < 0.7 时回退到 LLM 分类器）
  */
 export class IntentRouter {
+  private classifier?: import('./intent-classifier').IntentClassifier;
+
   constructor(
     private readonly ruleEngine: RuleEngine,
     private readonly ragService: RAGService,
     private readonly llmService: LLMService,
   ) {}
 
+  /** 注入 LLM 意图分类器（Phase 13a） */
+  setClassifier(classifier: import('./intent-classifier').IntentClassifier): void {
+    this.classifier = classifier;
+  }
+
   /**
    * 识别用户意图
-   * 基于关键词 + 模式匹配的快速分类
+   * Phase 13: 关键词快速匹配 + LLM 兜底分类
    */
-  async identifyIntent(query: string, context?: string): Promise<IntentResult> {
-    const q = (query + (context ?? '')).toLowerCase();
+  async identifyIntent(
+    query: string,
+    context?: Array<{ role: 'user' | 'assistant'; content: string }>,
+  ): Promise<IntentResult> {
+    // 第一层：关键词快速匹配
+    const keywordResult = this.keywordMatch(query);
+
+    // 置信度足够，直接使用关键词结果
+    if (keywordResult.confidence >= 0.7) {
+      return keywordResult;
+    }
+
+    // 第二层：LLM 意图分类（当有分类器且关键词置信度低时）
+    if (this.classifier) {
+      try {
+        const llmResult = await this.classifier.classify(query, context);
+        if (llmResult.confidence > keywordResult.confidence) {
+          return llmResult;
+        }
+      } catch {
+        // LLM 分类失败，使用关键词结果
+      }
+    }
+
+    return keywordResult;
+  }
+
+  /**
+   * 关键词匹配（原 identifyIntent 逻辑，重构为同步方法）
+   */
+  private keywordMatch(query: string): IntentResult {
+    const q = (query).toLowerCase();
 
     // 1. 志愿匹配（分数线、位次、志愿推荐）
     const volunteerKeywords = ['分数线', '录取', '志愿', '位次', '投档', '冲稳保',
@@ -322,7 +359,7 @@ export class IntentRouter {
       };
     }
 
-    // 6. 默认：通用对话
+    // 6. 默认：通用对话（低置信度，可被 LLM 分类器覆盖）
     return {
       taskType: TaskType.GENERAL_CHAT,
       strategy: 'llm',
@@ -336,7 +373,7 @@ export class IntentRouter {
   async route(request: AIRequest): Promise<AIResponse> {
     const intent = request.taskType
       ? { taskType: request.taskType, strategy: 'hybrid' as RouteStrategy, confidence: 1.0 }
-      : await this.identifyIntent(request.query);
+      : await this.identifyIntent(request.query, request.context);
 
     switch (intent.strategy) {
       case 'rule':
@@ -485,6 +522,7 @@ export function createHybridRouter(config?: {
   ruleEngine?: RuleEngine;
   ragService?: RAGService;
   llmService?: LLMService;
+  enableClassifier?: boolean;
 }): IntentRouter {
   const noopRule: RuleEngine = {
     canHandle: () => false,
@@ -508,11 +546,20 @@ export function createHybridRouter(config?: {
     chatJSON: async () => ({}) as any,
   };
 
-  return new IntentRouter(
+  const llm = config?.llmService ?? noopLlm;
+  const router = new IntentRouter(
     config?.ruleEngine ?? noopRule,
     config?.ragService ?? noopRag,
-    config?.llmService ?? noopLlm,
+    llm,
   );
+
+  // Phase 13a: 启用 LLM 意图分类器
+  if (config?.enableClassifier) {
+    const { IntentClassifier } = require('./intent-classifier');
+    router.setClassifier(new IntentClassifier(llm));
+  }
+
+  return router;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -589,3 +636,16 @@ export { seedKnowledge, SEED_KNOWLEDGE } from './knowledge-seed';
 // Re-export volunteer matching engine (Phase 12)
 export { VolunteerMatchingEngine } from './volunteer-engine';
 export type { VolunteerQuery, MatchResult, VolunteerRecommendation } from './volunteer-engine';
+
+// Re-export intent classifier (Phase 13a)
+export { IntentClassifier, extractEntities } from './intent-classifier';
+export type { IntentClassification } from './intent-classifier';
+
+// Re-export structured query agent (Phase 13b)
+export { StructuredQueryAgent } from './structured-query-agent';
+export type {
+  StructuredQuery,
+  StructuredQueryType,
+  StructuredQueryResult,
+  QueryExecutor,
+} from './structured-query-agent';

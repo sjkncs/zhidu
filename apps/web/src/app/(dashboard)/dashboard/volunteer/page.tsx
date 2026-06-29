@@ -148,15 +148,15 @@ export default function VolunteerWizardPage() {
       });
       if (rankInput) params.set('rank', rankInput);
 
-      const res = await fetch(`/api/assessments/rankToScore?${params}`);
+      const res = await fetch(`/api/assessments/rank-to-score?${params}`);
       if (!res.ok) throw new Error('查询失败，请稍后重试');
       const data = await res.json();
 
       setRankResult({
-        rank: data.rank ?? data.data?.rank ?? 0,
+        rank: data.data?.estimatedRank ?? data.rank ?? 0,
         score: Number(score),
         province,
-        percentile: data.percentile ?? data.data?.percentile ?? 0,
+        percentile: data.data?.confidence ?? data.percentile ?? 0,
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '查询失败，请稍后重试';

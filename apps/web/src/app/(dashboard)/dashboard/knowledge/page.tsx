@@ -102,7 +102,7 @@ export default function KnowledgePage() {
         if (!res.ok) throw new Error('搜索失败');
 
         const data = await res.json();
-        setResults(data.results ?? []);
+        setResults(data.data?.chunks ?? data.results ?? []);
       } catch {
         setResults([]);
       } finally {

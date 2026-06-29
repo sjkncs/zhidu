@@ -44,6 +44,32 @@ function getDb(): SupabaseClient<Database> {
   return _db;
 }
 
+/** Convert a snake_case key to camelCase */
+function snakeToCamel(s: string): string {
+  return s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+}
+
+/** Recursively convert all keys of an object (or array of objects) from snake_case to camelCase */
+function toCamel<T>(input: unknown): T {
+  if (Array.isArray(input)) {
+    return input.map((item) => toCamel(item)) as T;
+  }
+  if (input !== null && typeof input === 'object' && !(input instanceof Date)) {
+    const obj = input as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+    for (const key of Object.keys(obj)) {
+      result[snakeToCamel(key)] = toCamel(obj[key]);
+    }
+    return result as T;
+  }
+  return input as T;
+}
+
+/** Convert camelCase key to snake_case for query building */
+function camelToSnake(s: string): string {
+  return s.replace(/[A-Z]/g, (c) => '_' + c.toLowerCase());
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // University 院校查询
 // ─────────────────────────────────────────────────────────────────────────────
@@ -249,10 +275,10 @@ export async function getAdmissionScores(params: {
       .eq('province', province);
 
     if (universityId) {
-      query = query.eq('universityId', universityId);
+      query = query.eq('university_id', universityId);
     }
     if (majorId) {
-      query = query.eq('majorId', majorId);
+      query = query.eq('major_id', majorId);
     }
     if (years && years.length > 0) {
       query = query.in('year', years);
@@ -269,7 +295,7 @@ export async function getAdmissionScores(params: {
       return [];
     }
 
-    return (data as AdmissionScoreRow[]) ?? [];
+    return toCamel<AdmissionScoreRow[]>(data) ?? [];
   } catch (err) {
     console.error('[getAdmissionScores] 异常:', err);
     return [];
@@ -297,13 +323,13 @@ export async function getAdmissionScoreRange(params: {
       .in('year', years);
 
     if (minScore != null) {
-      query = query.gte('minScore', minScore);
+      query = query.gte('min_score', minScore);
     }
     if (maxScore != null) {
-      query = query.lte('minScore', maxScore);
+      query = query.lte('min_score', maxScore);
     }
 
-    query = query.order('minScore', { ascending: true });
+    query = query.order('min_score', { ascending: true });
 
     const { data, error } = await query;
 
@@ -312,7 +338,7 @@ export async function getAdmissionScoreRange(params: {
       return [];
     }
 
-    return (data as AdmissionScoreRow[]) ?? [];
+    return toCamel<AdmissionScoreRow[]>(data) ?? [];
   } catch (err) {
     console.error('[getAdmissionScoreRange] 异常:', err);
     return [];
@@ -374,14 +400,14 @@ export async function findCandidatesByScore(params: {
       `)
       .eq('province', province)
       .eq('year', year)
-      .gte('minScore', lowerBound)
-      .lte('minScore', upperBound);
+      .gte('min_score', lowerBound)
+      .lte('min_score', upperBound);
 
     if (tier) {
       query = query.eq('universities.tier', tier as UniversityRow['tier']);
     }
 
-    query = query.order('minScore', { ascending: false }).limit(limit);
+    query = query.order('min_score', { ascending: false }).limit(limit);
 
     const { data, error } = await query;
 
@@ -415,13 +441,13 @@ export async function createPlan(params: {
   try {
     const { data, error } = await getDb().from('application_plans')
       .insert({
-        userId,
+        user_id: userId,
         name,
         year,
         province,
         status: 'DRAFT' as const,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       } as any)
       .select()
       .single();
@@ -431,7 +457,7 @@ export async function createPlan(params: {
       return null;
     }
 
-    return data as ApplicationPlanRow;
+    return toCamel<ApplicationPlanRow>(data);
   } catch (err) {
     console.error('[createPlan] 异常:', err);
     return null;
@@ -453,7 +479,7 @@ export async function getPlanById(planId: string): Promise<ApplicationPlanRow | 
       return null;
     }
 
-    return (data as ApplicationPlanRow) ?? null;
+    return toCamel<ApplicationPlanRow>(data) ?? null;
   } catch (err) {
     console.error('[getPlanById] 异常:', err);
     return null;
@@ -467,15 +493,15 @@ export async function getUserPlans(userId: string): Promise<ApplicationPlanRow[]
   try {
     const { data, error } = await getDb().from('application_plans')
       .select('*')
-      .eq('userId', userId)
-      .order('createdAt', { ascending: false });
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
 
     if (error) {
       console.error('[getUserPlans] 查询失败:', error.message);
       return [];
     }
 
-    return (data as ApplicationPlanRow[]) ?? [];
+    return toCamel<ApplicationPlanRow[]>(data) ?? [];
   } catch (err) {
     console.error('[getUserPlans] 异常:', err);
     return [];
@@ -489,10 +515,13 @@ export async function addPlanItems(planId: string, items: Partial<PlanItemRow>[]
   if (!items || items.length === 0) return [];
 
   try {
-    const rows = items.map((item) => ({
-      ...item,
-      planId,
-    }));
+    const rows = items.map((item) => {
+      const converted: Record<string, unknown> = { plan_id: planId };
+      for (const [k, v] of Object.entries(item)) {
+        converted[camelToSnake(k)] = v;
+      }
+      return converted;
+    });
 
     const { data, error } = await getDb().from('plan_items')
       .insert(rows as any[])
@@ -503,7 +532,7 @@ export async function addPlanItems(planId: string, items: Partial<PlanItemRow>[]
       return [];
     }
 
-    return (data as PlanItemRow[]) ?? [];
+    return toCamel<PlanItemRow[]>(data) ?? [];
   } catch (err) {
     console.error('[addPlanItems] 异常:', err);
     return [];
@@ -517,7 +546,7 @@ export async function getPlanItems(planId: string): Promise<PlanItemRow[]> {
   try {
     const { data, error } = await getDb().from('plan_items')
       .select('*')
-      .eq('planId', planId)
+      .eq('plan_id', planId)
       .order('order', { ascending: true });
 
     if (error) {
@@ -525,7 +554,7 @@ export async function getPlanItems(planId: string): Promise<PlanItemRow[]> {
       return [];
     }
 
-    return (data as PlanItemRow[]) ?? [];
+    return toCamel<PlanItemRow[]>(data) ?? [];
   } catch (err) {
     console.error('[getPlanItems] 异常:', err);
     return [];
@@ -555,7 +584,7 @@ export async function deletePlanItem(itemId: string): Promise<void> {
 export async function updatePlanStatus(planId: string, status: string): Promise<void> {
   try {
     const { error } = await getDb().from('application_plans')
-      .update({ status: status as any, updatedAt: new Date().toISOString() } as any)
+      .update({ status: status as any, updated_at: new Date().toISOString() } as any)
       .eq('id', planId);
 
     if (error) {
@@ -585,12 +614,12 @@ export async function saveAssessment(params: {
   try {
     const { data, error } = await getDb().from('assessments')
       .insert({
-        userId,
+        user_id: userId,
         type: type as AssessmentRow['type'],
-        rawScores,
+        raw_scores: rawScores,
         result,
         confidence,
-        takenAt: new Date().toISOString(),
+        taken_at: new Date().toISOString(),
       } as any)
       .select()
       .single();
@@ -600,7 +629,7 @@ export async function saveAssessment(params: {
       return null;
     }
 
-    return data as AssessmentRow;
+    return toCamel<AssessmentRow>(data);
   } catch (err) {
     console.error('[saveAssessment] 异常:', err);
     return null;
@@ -617,8 +646,8 @@ export async function getUserAssessments(
   try {
     let query = getDb().from('assessments')
       .select('*')
-      .eq('userId', userId)
-      .order('takenAt', { ascending: false });
+      .eq('user_id', userId)
+      .order('taken_at', { ascending: false });
 
     if (type) {
       query = query.eq('type', type as AssessmentRow['type']);
@@ -631,7 +660,7 @@ export async function getUserAssessments(
       return [];
     }
 
-    return (data as AssessmentRow[]) ?? [];
+    return toCamel<AssessmentRow[]>(data) ?? [];
   } catch (err) {
     console.error('[getUserAssessments] 异常:', err);
     return [];
@@ -648,9 +677,9 @@ export async function getLatestAssessment(
   try {
     const { data, error } = await getDb().from('assessments')
       .select('*')
-      .eq('userId', userId)
+      .eq('user_id', userId)
       .eq('type', type as AssessmentRow['type'])
-      .order('takenAt', { ascending: false })
+      .order('taken_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
@@ -659,7 +688,7 @@ export async function getLatestAssessment(
       return null;
     }
 
-    return (data as AssessmentRow) ?? null;
+    return toCamel<AssessmentRow>(data) ?? null;
   } catch (err) {
     console.error('[getLatestAssessment] 异常:', err);
     return null;
@@ -677,7 +706,7 @@ export async function getUserProfile(userId: string): Promise<ProfileRow | null>
   try {
     const { data, error } = await getDb().from('profiles')
       .select('*')
-      .eq('userId', userId)
+      .eq('user_id', userId)
       .maybeSingle();
 
     if (error) {
@@ -685,7 +714,7 @@ export async function getUserProfile(userId: string): Promise<ProfileRow | null>
       return null;
     }
 
-    return (data as ProfileRow) ?? null;
+    return toCamel<ProfileRow>(data) ?? null;
   } catch (err) {
     console.error('[getUserProfile] 异常:', err);
     return null;
@@ -701,12 +730,13 @@ export async function updateUserProfile(
   updates: Partial<ProfileRow>,
 ): Promise<ProfileRow | null> {
   try {
+    const snakeUpdates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    for (const [k, v] of Object.entries(updates)) {
+      snakeUpdates[camelToSnake(k)] = v;
+    }
     const { data, error } = await getDb().from('profiles')
-      .update({
-        ...updates,
-        updatedAt: new Date().toISOString(),
-      } as any)
-      .eq('userId', userId)
+      .update(snakeUpdates as any)
+      .eq('user_id', userId)
       .select()
       .maybeSingle();
 
@@ -715,7 +745,7 @@ export async function updateUserProfile(
       return null;
     }
 
-    return (data as ProfileRow) ?? null;
+    return toCamel<ProfileRow>(data) ?? null;
   } catch (err) {
     console.error('[updateUserProfile] 异常:', err);
     return null;
