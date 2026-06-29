@@ -34,7 +34,12 @@ export interface DoneEvent {
   type: 'done';
 }
 
-export type SSEEvent = SourcesEvent | ContentEvent | ErrorEvent | DoneEvent;
+export interface SessionEvent {
+  type: 'session';
+  sessionId: string;
+}
+
+export type SSEEvent = SourcesEvent | ContentEvent | ErrorEvent | DoneEvent | SessionEvent;
 
 /**
  * 异步生成器：从 ReadableStream 逐行解析 SSE 事件
@@ -81,6 +86,8 @@ export async function* parseSSEStream(
             yield { type: 'content', delta: parsed.delta };
           } else if (parsed.type === 'error' && typeof parsed.error === 'string') {
             yield { type: 'error', error: parsed.error };
+          } else if (parsed.type === 'session' && typeof parsed.sessionId === 'string') {
+            yield { type: 'session', sessionId: parsed.sessionId };
           }
         } catch {
           // 跳过无法解析的行

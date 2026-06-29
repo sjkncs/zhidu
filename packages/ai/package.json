@@ -14,7 +14,8 @@
     "clean": "rm -rf dist node_modules"
   },
   "dependencies": {
-    "@zhidu/shared": "workspace:*"
+    "@zhidu/shared": "workspace:*",
+    "@zhidu/db": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0"

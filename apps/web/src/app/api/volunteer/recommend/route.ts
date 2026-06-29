@@ -1,16 +1,77 @@
-// API: 志愿推荐 — 根据分数/省份/选科获取冲稳保推荐
-// GET /api/volunteer/recommend?score=620&province=广东&limit=50
+// API: 志愿智能推荐 — 确定性匹配引擎（位次法 + 线差法双模型）
+// POST /api/volunteer/recommend
+// Body: { score, province, subjectType, year?, rank?, preferredMajorIds?, preferredCities?, tierFilter? }
+//
+// 架构原则（对标高考数据通）：
+//   数据匹配用确定性算法（SQL + 位次法/线差法），不用 LLM
+//   AI 的角色是意图理解和结果分析，不是数据匹配
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { createRuleEngine } from '@zhidu/ai/rule-engine';
+import { VolunteerMatchingEngine } from '@zhidu/ai/volunteer-engine';
 
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: '未登录' }, { status: 401 });
+
+    const body = await request.json();
+    const {
+      score,
+      province,
+      subjectType,
+      year,
+      rank,
+      preferredMajorIds,
+      preferredCities,
+      tierFilter,
+    } = body;
+
+    // 参数验证
+    if (!score || typeof score !== 'number') {
+      return NextResponse.json({ error: '缺少必填参数: score (分数)' }, { status: 400 });
+    }
+    if (!province || typeof province !== 'string') {
+      return NextResponse.json({ error: '缺少必填参数: province (省份)' }, { status: 400 });
+    }
+    if (!subjectType || typeof subjectType !== 'string') {
+      return NextResponse.json({ error: '缺少必填参数: subjectType (科类)' }, { status: 400 });
+    }
+
+    const queryYear = year ?? new Date().getFullYear();
+
+    const engine = new VolunteerMatchingEngine();
+    const recommendation = await engine.recommend({
+      score,
+      province,
+      subjectType,
+      year: queryYear,
+      rank: rank ?? undefined,
+      preferredMajorIds: preferredMajorIds ?? undefined,
+      preferredCities: preferredCities ?? undefined,
+      tierFilter: tierFilter ?? undefined,
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: recommendation,
+    });
+  } catch (err: any) {
+    console.error('[volunteer/recommend]', err);
+    return NextResponse.json(
+      { error: err.message || '志愿推荐服务暂时不可用' },
+      { status: 500 },
+    );
+  }
+}
+
+// 保留 GET 兼容性（旧版接口）
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const score = parseInt(searchParams.get('score') ?? '0');
   const province = searchParams.get('province') ?? '';
-  const limit = parseInt(searchParams.get('limit') ?? '50');
-  const subjects = searchParams.get('subjects')?.split(',') ?? [];
+  const subjectType = searchParams.get('subjectType') ?? '理科';
 
   if (!score || !province) {
     return NextResponse.json(
@@ -20,40 +81,23 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabase = await createClient();
-
-    // 检查用户是否已登录
-    const { data: { user } } = await supabase.auth.getUser();
-
-    // 创建规则引擎实例
-    const engine = createRuleEngine(supabase);
-
-    // 执行志愿推荐
-    const items = await engine.matchByScore({
+    const engine = new VolunteerMatchingEngine();
+    const recommendation = await engine.recommend({
       score,
       province,
-      subjectCombination: subjects.length > 0 ? subjects : undefined,
-      limit,
+      subjectType,
+      year: new Date().getFullYear(),
     });
-
-    // 统计各层级数量
-    const stats = {
-      total: items.length,
-      rush: items.filter(i => i.riskLevel === 'RUSH').length,
-      stable: items.filter(i => i.riskLevel === 'STABLE').length,
-      safe: items.filter(i => i.riskLevel === 'SAFE').length,
-    };
 
     return NextResponse.json({
       success: true,
       data: {
         score,
         province,
-        items,
-        stats,
+        ...recommendation,
       },
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error('[API] volunteer recommend error:', err);
     return NextResponse.json(
       { error: '推荐服务暂时不可用，请稍后重试' },

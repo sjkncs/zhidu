@@ -18,8 +18,8 @@ export interface SupabaseConfig {
  * @param config - 连接配置，默认从环境变量读取
  */
 export function createClient(config?: SupabaseConfig): SupabaseClient<Database> {
-  const url = config?.url ?? process.env.SUPABASE_URL ?? '';
-  const anonKey = config?.anonKey ?? process.env.SUPABASE_ANON_KEY ?? '';
+  const url = config?.url ?? process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  const anonKey = config?.anonKey ?? process.env.SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
   return createSupabaseClient<Database>(url, anonKey);
 }
 
@@ -491,6 +491,96 @@ export interface KnowledgeChunkRow {
   createdAt: string;
 }
 
+/** 对话会话表 */
+export interface ChatSessionRow {
+  id: string;
+  userId: string;
+  title: string;
+  taskType: string;
+  messageCount: number;
+  lastActiveAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 对话消息表 */
+export interface ChatMessageRow {
+  id: string;
+  sessionId: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  sources?: Array<{ title: string; snippet: string; score: number }>;
+  taskType: string;
+  tokenCount?: number;
+  createdAt: string;
+}
+
+/** 通知表 */
+export interface NotificationRow {
+  id: string;
+  userId: string;
+  type: 'info' | 'success' | 'warning' | 'reminder' | 'system';
+  title: string;
+  content?: string;
+  href?: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
+/** 省控线表 */
+export interface ProvinceScoreLineRow {
+  id: string;
+  province: string;
+  year: number;
+  batch: string;
+  subjectType: string;
+  scoreLine: number;
+  totalCandidates?: number;
+  createdAt: string;
+}
+
+/** 就业薪资数据表 */
+export interface EmploymentSalaryRow {
+  id: string;
+  majorId?: string;
+  majorName?: string;
+  city?: string;
+  province?: string;
+  avgSalary?: number;
+  medianSalary?: number;
+  p25Salary?: number;
+  p75Salary?: number;
+  dataYear: number;
+  sampleSize?: number;
+  source: string;
+  createdAt: string;
+}
+
+/** 一分一段表 */
+export interface ScoreRankRow {
+  id: string;
+  province: string;
+  year: number;
+  subjectType: string;
+  score: number;
+  countAtScore: number;
+  cumulativeRank: number;
+  createdAt: string;
+}
+
+/** 院校专业组映射 */
+export interface MajorGroupRow {
+  id: string;
+  universityId: string;
+  groupName: string;
+  province: string;
+  year: number;
+  subjectRequirements?: string;
+  majorIds: string[];
+  note?: string;
+  createdAt: string;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Database 类型（供 Supabase 客户端泛型使用）
 // ─────────────────────────────────────────────────────────────────────────────
@@ -527,6 +617,13 @@ export interface Database {
       transactions: { Row: TransactionRow };
       knowledge_documents: { Row: KnowledgeDocumentRow };
       knowledge_chunks: { Row: KnowledgeChunkRow };
+      chat_sessions: { Row: ChatSessionRow };
+      chat_messages: { Row: ChatMessageRow };
+      notifications: { Row: NotificationRow };
+      province_score_lines: { Row: ProvinceScoreLineRow };
+      employment_salaries: { Row: EmploymentSalaryRow };
+      score_rank_tables: { Row: ScoreRankRow };
+      major_groups: { Row: MajorGroupRow };
     };
   };
 }

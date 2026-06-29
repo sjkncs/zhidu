@@ -24,6 +24,7 @@ import {
   Moon,
   Menu,
 } from 'lucide-react';
+import { NotificationBell } from '@/components/NotificationBell';
 
 type IconComponent = React.ComponentType<{ className?: string }>;
 
@@ -244,6 +245,9 @@ function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* Notifications */}
+      <NotificationBell />
 
       {/* Theme toggle */}
       <ThemeToggle />

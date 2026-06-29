@@ -1,5 +1,12 @@
 import Link from "next/link";
 import { Cpu, TrendingUp, Home as HomeIcon, Users } from "lucide-react";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: '知渡 - AI 志愿填报与大学生成长平台',
+  description: '从高考志愿到人生规划，AI 驱动的个人成长操作系统。覆盖 3000+ 高校，500+ 专业，智能匹配冲稳保三档方案。',
+  alternates: { canonical: '/' },
+};
 
 type IconComponent = React.ComponentType<{ className?: string }>;
 
@@ -72,6 +79,30 @@ const steps = [
 export default function Home() {
   return (
     <main className="flex-1">
+      {/* JSON-LD Structured Data */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'WebApplication',
+            name: '知渡',
+            alternateName: 'Zhidu',
+            description: '从高考志愿到人生规划，AI 驱动的个人成长操作系统',
+            applicationCategory: 'EducationalApplication',
+            operatingSystem: 'Web',
+            offers: { '@type': 'Offer', price: '0', priceCurrency: 'CNY' },
+            featureList: [
+              'AI 智能志愿填报',
+              '院校专业匹配',
+              '生涯规划',
+              '学业管理与 GPA 计算',
+              '技能树成长追踪',
+              'AI 知识问答',
+            ],
+          }),
+        }}
+      />
       {/* Navigation */}
       <nav className="sticky top-0 z-50 border-b border-border bg-surface/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">

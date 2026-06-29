@@ -585,3 +585,7 @@ export type { RAGServiceConfig, SearchResultRow } from './rag-service';
 
 // Re-export knowledge seed
 export { seedKnowledge, SEED_KNOWLEDGE } from './knowledge-seed';
+
+// Re-export volunteer matching engine (Phase 12)
+export { VolunteerMatchingEngine } from './volunteer-engine';
+export type { VolunteerQuery, MatchResult, VolunteerRecommendation } from './volunteer-engine';

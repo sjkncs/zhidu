@@ -3,12 +3,32 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/stores/auth-store';
 import { ModuleGrid, QuickActions } from './module-grid';
+import { RecentActivity } from '@/components/dashboard/RecentActivity';
+import { UpcomingDeadlines } from '@/components/dashboard/UpcomingDeadlines';
 
 interface Stats {
   volunteerPlans: number | null;
   skillTrees: number | null;
   gpa: string;
   diaryStreak: number | null;
+}
+
+interface ActivityItem {
+  id: string;
+  type: 'course' | 'diary' | 'memo' | 'goal' | 'skill' | 'resume';
+  title: string;
+  subtitle?: string;
+  href: string;
+  createdAt: string;
+}
+
+interface DeadlineItem {
+  id: string;
+  type: 'todo' | 'memo';
+  title: string;
+  dueDate: string;
+  href: string;
+  isOverdue: boolean;
 }
 
 function calculateDiaryStreak(entries: Array<{ date?: string; created_at?: string }>): number {
@@ -51,6 +71,8 @@ export default function DashboardPage() {
     gpa: '-',
     diaryStreak: null,
   });
+  const [recentActivities, setRecentActivities] = useState<ActivityItem[]>([]);
+  const [upcomingDeadlines, setUpcomingDeadlines] = useState<DeadlineItem[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,7 +130,23 @@ export default function DashboardPage() {
       }
     }
 
+    async function fetchDashboardData() {
+      try {
+        const res = await fetch('/api/dashboard');
+        if (res.ok) {
+          const json = await res.json();
+          if (!cancelled) {
+            setRecentActivities(json.data?.recentActivities ?? []);
+            setUpcomingDeadlines(json.data?.upcomingDeadlines ?? []);
+          }
+        }
+      } catch {
+        // silently fail
+      }
+    }
+
     fetchStats();
+    fetchDashboardData();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -168,6 +206,12 @@ export default function DashboardPage() {
           )}
           <p className="mt-1 text-xs text-text-secondary">坚持每日记录</p>
         </div>
+      </div>
+
+      {/* Recent activity + Upcoming deadlines */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <RecentActivity items={recentActivities} />
+        <UpcomingDeadlines items={upcomingDeadlines} />
       </div>
 
       {/* Module grid */}

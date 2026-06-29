@@ -93,6 +93,9 @@ importers:
 
   packages/ai:
     dependencies:
+      '@zhidu/db':
+        specifier: workspace:*
+        version: link:../db
       '@zhidu/shared':
         specifier: workspace:*
         version: link:../shared

@@ -1,13 +1,14 @@
-// API: RAG 智能问答 — 知识库检索 + LLM 生成
+// API: RAG 智能问答 — 知识库检索 + LLM 生成 + 对话持久化
 // POST /api/ai/chat
-// Body: { query: string, collections?: string[], context?: Message[], taskType?: string, stream?: boolean }
+// Body: { query, collections?, context?, taskType?, stream?, sessionId? }
 //
-// 支持同步和流式 (SSE) 两种模式
+// 支持同步和流式 (SSE) 两种模式，自动持久化对话到 chat_sessions/chat_messages
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createRAGService } from '@zhidu/ai/rag-service';
 import { createLLMService } from '@zhidu/ai/llm-service';
+import { createChatSession, batchCreateChatMessages } from '@zhidu/db/repository';
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,6 +19,7 @@ export async function POST(request: NextRequest) {
       context: chatContext,
       taskType = 'KNOWLEDGE_QA',
       stream = false,
+      sessionId: inputSessionId,
     } = body;
 
     if (!query || typeof query !== 'string') {
@@ -28,6 +30,15 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // ─── Session management ───
+    let sessionId = inputSessionId;
+    if (!sessionId && user) {
+      const session = await createChatSession(user.id);
+      if (session) sessionId = session.id;
+    }
+
     const llm = createLLMService();
     const rag = createRAGService(supabase as any, llm);
 
@@ -70,15 +81,27 @@ ${sourcesText || '（暂无相关参考资料）'}`,
       });
 
       const encoder = new TextEncoder();
+      const sourcesPayload = chunks.map(c => ({
+        title: (c.metadata as any)?.title ?? '',
+        snippet: c.content.slice(0, 150),
+        score: c.score,
+      }));
+
+      // Collect full assistant response for persistence
+      let fullContent = '';
+      const persistSessionId = sessionId;
+
       const readable = new ReadableStream({
         async start(controller) {
           try {
+            // 发送 sessionId
+            if (persistSessionId) {
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ type: 'session', sessionId: persistSessionId })}\n\n`),
+              );
+            }
+
             // 先发送来源信息
-            const sourcesPayload = chunks.map(c => ({
-              title: (c.metadata as any)?.title ?? '',
-              snippet: c.content.slice(0, 150),
-              score: c.score,
-            }));
             controller.enqueue(
               encoder.encode(`data: ${JSON.stringify({ type: 'sources', sources: sourcesPayload })}\n\n`),
             );
@@ -86,6 +109,7 @@ ${sourcesText || '（暂无相关参考资料）'}`,
             // 流式发送 LLM 内容
             for await (const chunk of llmStream) {
               if (chunk.delta) {
+                fullContent += chunk.delta;
                 controller.enqueue(
                   encoder.encode(`data: ${JSON.stringify({ type: 'content', delta: chunk.delta })}\n\n`),
                 );
@@ -93,6 +117,14 @@ ${sourcesText || '（暂无相关参考资料）'}`,
               if (chunk.done) {
                 controller.enqueue(encoder.encode('data: [DONE]\n\n'));
               }
+            }
+
+            // Persist messages after stream completes
+            if (persistSessionId && fullContent) {
+              await batchCreateChatMessages(persistSessionId, [
+                { role: 'user', content: query, taskType },
+                { role: 'assistant', content: fullContent, sources: sourcesPayload, taskType },
+              ]);
             }
           } catch (err) {
             console.error('[Chat Stream] error:', err);
@@ -121,10 +153,24 @@ ${sourcesText || '（暂无相关参考资料）'}`,
       context: chatContext?.map((m: any) => `${m.role}: ${m.content}`).join('\n'),
     });
 
+    // Persist synchronous messages
+    if (sessionId) {
+      const sourcesPayload = sources.map(s => ({
+        title: (s.metadata as any)?.title ?? '',
+        snippet: s.content.slice(0, 200),
+        score: s.score,
+      }));
+      await batchCreateChatMessages(sessionId, [
+        { role: 'user', content: query, taskType },
+        { role: 'assistant', content, sources: sourcesPayload, taskType },
+      ]);
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         content,
+        sessionId,
         sources: sources.map(s => ({
           title: (s.metadata as any)?.title ?? '',
           url: (s.metadata as any)?.sourceUrl,
