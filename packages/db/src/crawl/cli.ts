@@ -83,6 +83,15 @@ function printUsage(): void {
 }
 
 async function main(): Promise<void> {
+  // 加载 apps/web/.env.local 中的环境变量
+  const dotenv = await import('dotenv');
+  const { fileURLToPath } = await import('url');
+  const path = await import('path');
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const envPath = path.resolve(__dirname, '../../../../apps/web/.env.local');
+  dotenv.config({ path: envPath });
+
   const args = parseArgs();
 
   console.log('=== 智渡数据爬虫 ===');

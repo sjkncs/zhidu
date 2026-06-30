@@ -80,6 +80,7 @@ const degrees = ['学士', '硕士', '博士'];
 
 export default function MajorsPage() {
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [category, setCategory] = useState('');
   const [degree, setDegree] = useState('');
   const [page, setPage] = useState(1);
@@ -97,11 +98,21 @@ export default function MajorsPage() {
 
   const totalPages = Math.ceil(total / pageSize);
 
+  // 搜索防抖
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedQuery]);
+
   const fetchMajors = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (query) params.set('name', query);
+      if (debouncedQuery) params.set('name', debouncedQuery);
       if (category) params.set('category', category);
       if (degree) params.set('degree', degree);
       params.set('page', String(page));
@@ -118,7 +129,7 @@ export default function MajorsPage() {
     } finally {
       setLoading(false);
     }
-  }, [query, category, degree, page, pageSize]);
+  }, [debouncedQuery, category, degree, page, pageSize]);
 
   useEffect(() => {
     fetchMajors();
@@ -174,7 +185,7 @@ export default function MajorsPage() {
             type="text"
             placeholder="搜索专业名称..."
             value={query}
-            onChange={(e) => { setQuery(e.target.value); setPage(1); }}
+            onChange={(e) => setQuery(e.target.value)}
             className="w-full rounded-xl border border-border bg-surface py-2.5 pl-10 pr-10 text-sm text-text-primary placeholder:text-text-tertiary focus:border-blue focus:outline-none focus:ring-2 focus:ring-blue/20"
           />
           {query && (

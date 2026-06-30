@@ -58,21 +58,28 @@ export async function ingestCrawlResult(
 }
 
 /**
- * 写入单条院校（upsert by name）
+ * 写入单条院校（upsert by name+province）
+ * 注意：爬虫列表页不含 985/211 标签，只更新爬虫确实采集到的字段，
+ * 保留已有的 is_985/is_211/is_dual_first_class 等值
  */
 async function ingestUniversity(db: SupabaseClient, uni: CrawledUniversity): Promise<void> {
+  // 先查是否已存在
+  const { data: existing } = await db
+    .from('universities')
+    .select('id, is_985, is_211, is_dual_first_class')
+    .eq('name', uni.name)
+    .eq('province', uni.province)
+    .maybeSingle();
+
   const row: Record<string, unknown> = {
     name: uni.name,
     province: uni.province,
-    city: uni.city,
+    city: uni.city || uni.province, // 列表页无城市信息时以省份填充
     tier: uni.tier || '普通本科',
     is_public: uni.isPublic ?? true,
     website: uni.website,
     school_type: uni.schoolType,
     founding_year: uni.foundingYear,
-    is_985: uni.is985 ?? false,
-    is_211: uni.is211 ?? false,
-    is_dual_first_class: uni.isDualFirstClass ?? false,
     education_level: uni.educationLevel,
     affiliated: uni.affiliated,
     description: uni.description,
@@ -83,11 +90,33 @@ async function ingestUniversity(db: SupabaseClient, uni: CrawledUniversity): Pro
     updated_at: new Date().toISOString(),
   };
 
-  const { error } = await db
-    .from('universities')
-    .upsert(row, { onConflict: 'name,province' });
+  // 只有爬虫确信为 true 时才设置 985/211/双一流，否则保留已有值
+  if (uni.is985) row.is_985 = true;
+  if (uni.is211) row.is_211 = true;
+  if (uni.isDualFirstClass) row.is_dual_first_class = true;
 
-  if (error) throw error;
+  if (existing) {
+    // 更新已有记录（保留已确认的标签）
+    if (!uni.is985 && existing.is_985) delete row.is_985;
+    if (!uni.is211 && existing.is_211) delete row.is_211;
+    if (!uni.isDualFirstClass && existing.is_dual_first_class) delete row.is_dual_first_class;
+
+    const { error } = await db
+      .from('universities')
+      .update(row)
+      .eq('id', existing.id);
+    if (error) throw error;
+  } else {
+    // 新记录 — 设置爬虫能确认的值
+    row.is_985 = uni.is985 ?? false;
+    row.is_211 = uni.is211 ?? false;
+    row.is_dual_first_class = uni.isDualFirstClass ?? false;
+
+    const { error } = await db
+      .from('universities')
+      .insert(row);
+    if (error) throw error;
+  }
 }
 
 /**

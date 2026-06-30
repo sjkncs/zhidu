@@ -119,7 +119,9 @@ export function createRAGService(config: RAGServiceConfig): RAGService {
 
     /**
      * 检索相关文档片段
-     * 调用 Supabase RPC: search_knowledge
+     * Phase 3a: pg_trgm 关键词搜索 (search_knowledge)
+     * Phase 3b (TODO): 当 embedding 数据就绪后，升级为 hybrid_search (关键词 + 语义向量)
+     *   hybrid_search 需要 query_embedding，由 ZHIPU_EMBEDDING_KEY 或 OPENAI_API_KEY 生成
      */
     async retrieve(params: {
       query: string;
@@ -129,7 +131,7 @@ export function createRAGService(config: RAGServiceConfig): RAGService {
       const { query, collections, topK = defaultTopK } = params;
 
       try {
-        // 调用 search_knowledge RPC 函数
+        // 调用 search_knowledge RPC 函数（pg_trgm 关键词搜索）
         const { data, error } = await db.rpc('search_knowledge', {
           query_text: query,
           collection_filter: collections?.length ? collections : null,

@@ -28,6 +28,10 @@ export interface VolunteerQuery {
   preferredCities?: string[];
   /** 院校层级筛选 */
   tierFilter?: ('985' | '211' | '双一流')[];
+  /** 偏好学科评估等级（如 A+, A, A-） */
+  preferredDisciplineRatings?: string[];
+  /** 仅显示有排名数据的院校 */
+  requireRanking?: boolean;
 }
 
 export interface MatchResult {
@@ -59,6 +63,14 @@ export interface MatchResult {
     medianSalary?: number;
     city?: string;
   };
+  /** 院校排名信息 */
+  rankingInfo?: {
+    bestRank?: number;
+    bestRankSource?: string;
+    bestRankYear?: number;
+  };
+  /** 学科评估（匹配专业的学科评级） */
+  disciplineRating?: string;
 }
 
 export interface VolunteerRecommendation {
@@ -126,6 +138,12 @@ export class VolunteerMatchingEngine {
 
     // 7. 附加就业薪资数据
     await this.enrichWithSalaryData(results);
+
+    // 8. 附加院校排名数据（Phase 16b）
+    await this.enrichWithRankingData(results);
+
+    // 9. 附加学科评估数据（Phase 16b）
+    await this.enrichWithDisciplineData(results);
 
     const dataYears = [...new Set(historicalData.map((d) => d.year))];
 
@@ -478,6 +496,77 @@ export class VolunteerMatchingEngine {
       const salary = salaryMap.get(result.majorId);
       if (salary) {
         result.salaryInfo = salary;
+      }
+    }
+  }
+
+  /** 附加院校排名数据 */
+  private async enrichWithRankingData(results: MatchResult[]): Promise<void> {
+    if (results.length === 0) return;
+
+    const uniIds = [...new Set(results.map((r) => r.universityId).filter(Boolean))];
+    if (uniIds.length === 0) return;
+
+    const { data } = await this.db
+      .from('university_rankings')
+      .select('university_id, source, year, rank')
+      .in('university_id', uniIds)
+      .not('rank', 'is', null)
+      .order('rank', { ascending: true });
+
+    if (!data) return;
+
+    // 按院校取最佳排名
+    const rankMap = new Map<string, { bestRank: number; bestRankSource: string; bestRankYear: number }>();
+    for (const row of data) {
+      const key = row.university_id!;
+      const existing = rankMap.get(key);
+      if (!existing || (row.rank! < existing.bestRank)) {
+        rankMap.set(key, {
+          bestRank: row.rank!,
+          bestRankSource: row.source,
+          bestRankYear: row.year,
+        });
+      }
+    }
+
+    for (const result of results) {
+      const rank = rankMap.get(result.universityId);
+      if (rank) {
+        result.rankingInfo = rank;
+      }
+    }
+  }
+
+  /** 附加学科评估数据 */
+  private async enrichWithDisciplineData(results: MatchResult[]): Promise<void> {
+    if (results.length === 0) return;
+
+    const uniIds = [...new Set(results.map((r) => r.universityId).filter(Boolean))];
+    if (uniIds.length === 0) return;
+
+    const { data } = await this.db
+      .from('discipline_evaluations')
+      .select('university_id, discipline_name, rating')
+      .in('university_id', uniIds);
+
+    if (!data) return;
+
+    // 按院校聚合最佳评级
+    const ratingOrder = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-'];
+    const evalMap = new Map<string, string>();
+    for (const row of data) {
+      const key = row.university_id!;
+      const existing = evalMap.get(key);
+      if (!existing || ratingOrder.indexOf(row.rating) < ratingOrder.indexOf(existing)) {
+        evalMap.set(key, row.rating);
+      }
+    }
+
+    for (const result of results) {
+      const rating = evalMap.get(result.universityId);
+      if (rating) {
+        result.disciplineRating = rating;
       }
     }
   }

@@ -1,22 +1,21 @@
 // 阳光高考 (gaokao.chsi.com.cn) 爬虫
-// 采集院校信息和录取分数线数据
+// 采集院校信息 — 从列表页批量解析
 
 import { BaseCrawler } from './base-crawler';
-import type { CrawlResult, CrawlerConfig, CrawledUniversity, CrawledAdmissionScore } from './types';
+import type { CrawlResult, CrawlerConfig, CrawledUniversity } from './types';
 
 /**
  * 阳光高考院校信息爬虫
  *
- * 目标页面：
- * - 院校列表: gaokao.chsi.com.cn/sch/search--ss-on,searchType-1.dhtml
- * - 院校详情: gaokao.chsi.com.cn/sch/schoolInfo--schId-xxx.dhtml
- * - 录取分数: gaokao.chsi.com.cn/sch/schoolInfoScore--schId-xxx.dhtml
+ * 目标：院校搜索页 gaokao.chsi.com.cn/sch/search--ss-on,searchType-1,option-qg,start-{N}.dhtml
+ * 每页约 20 所院校，约 140+ 页覆盖全国 ~2800 所高校
  *
- * 注意：阳光高考部分页面需要 JavaScript 渲染，如果 fetch 获取不到数据，
- * 需要切换为 Playwright 浏览器自动化方式。此版本使用 fetch + HTML 解析。
+ * 页面结构：Vue SSR，每条院校在 div.sch-item 中，
+ * 点击事件 @click="window.open('/sch/schoolInfo--schId-{id}.dhtml')"
  */
 export class GaokaoCrawler extends BaseCrawler {
   private readonly baseUrl = 'https://gaokao.chsi.com.cn';
+  private readonly pageSize = 20;
 
   constructor(config?: CrawlerConfig) {
     super(config);
@@ -29,15 +28,11 @@ export class GaokaoCrawler extends BaseCrawler {
   async crawl(): Promise<CrawlResult> {
     const start = Date.now();
     const universities: CrawledUniversity[] = [];
-    const admissionScores: CrawledAdmissionScore[] = [];
 
     try {
-      // Phase 1: 采集院校列表
-      const unis = await this.crawlUniversityList();
+      // Phase 1: 批量采集院校列表（分页）
+      const unis = await this.crawlAllPages();
       universities.push(...unis);
-
-      // Phase 2: 采集各校详情（可选，数量大时建议分批）
-      // const details = await this.crawlUniversityDetails(universities);
 
       this.reportProgress({
         total: universities.length,
@@ -52,7 +47,7 @@ export class GaokaoCrawler extends BaseCrawler {
     return {
       source: this.sourceName,
       universities,
-      admissionScores,
+      admissionScores: [],
       majors: [],
       duration: Date.now() - start,
       errors: this.errors,
@@ -60,109 +55,130 @@ export class GaokaoCrawler extends BaseCrawler {
   }
 
   /**
-   * 爬取院校列表（分页）
-   * 阳光高考的院校搜索页面是分页 HTML
+   * 分页采集所有院校
    */
-  private async crawlUniversityList(): Promise<CrawledUniversity[]> {
+  private async crawlAllPages(): Promise<CrawledUniversity[]> {
     const results: CrawledUniversity[] = [];
+    let start = 0;
+    let emptyPages = 0;
 
-    // 阳光高考院校搜索 URL 模式
-    // 注意：实际 URL 结构需要在浏览器中验证
-    const listUrl = `${this.baseUrl}/sch/search--ss-on,searchType-1,option-qg.dhtml`;
+    while (emptyPages < 2) {
+      const url = `${this.baseUrl}/sch/search--ss-on,searchType-1,option-qg,start-${start}.dhtml`;
 
-    try {
-      const html = await this.fetchPage(listUrl);
+      try {
+        const html = await this.fetchPage(url);
+        const items = this.parseSchoolItems(html);
 
-      // 解析 HTML 提取院校列表
-      // 这里使用简单的正则提取，生产环境建议使用 cheerio
-      const schoolLinks = this.extractSchoolLinks(html);
-
-      for (let i = 0; i < schoolLinks.length; i++) {
-        const link = schoolLinks[i];
-        try {
-          const uni = await this.parseSchoolPage(link.url, link.name);
-          if (uni) results.push(uni);
-        } catch (err) {
-          this.errors.push(`Parse school ${link.name}: ${err}`);
+        if (items.length === 0) {
+          emptyPages++;
+          if (emptyPages >= 2) break;
+        } else {
+          emptyPages = 0;
+          results.push(...items);
         }
 
-        if (i % 10 === 0) {
-          this.reportProgress({
-            total: schoolLinks.length,
-            completed: i,
-            current: link.name,
-            errors: this.errors.length,
-          });
-        }
+        this.reportProgress({
+          total: -1, // unknown total
+          completed: results.length,
+          current: `第 ${Math.floor(start / this.pageSize) + 1} 页`,
+          errors: this.errors.length,
+        });
+
+        start += this.pageSize;
+      } catch (err) {
+        this.errors.push(`Page start=${start}: ${err}`);
+        // 遇到连续错误停 3 页后放弃
+        if (this.errors.length > 10) break;
+        start += this.pageSize;
       }
-    } catch (err) {
-      this.errors.push(`Crawl university list: ${err}`);
     }
 
     return results;
   }
 
   /**
-   * 从 HTML 中提取院校链接
-   * 实际实现需要根据页面结构调整选择器
+   * 从单页 HTML 中提取院校数据
+   *
+   * HTML 结构：
+   *   <div class="sch-item" @click="window.open('/sch/schoolInfo--schId-{id}.dhtml')">
+   *     <span class="name js-yxk-yxmc">{name}</span>
+   *     <div class="sch-department">{province}|主管部门：{dept}</div>
+   *     <div class="sch-level">
+   *       <div class="sch-level-tag">本科</div>
+   *       <div class="sch-level-tag">"双一流"建设高校</div>
+   *     </div>
+   *     <div class="manyidu-star-box">...<a class="num">4.6</a></div>
+   *   </div>
    */
-  private extractSchoolLinks(html: string): Array<{ url: string; name: string }> {
-    const links: Array<{ url: string; name: string }> = [];
+  private parseSchoolItems(html: string): CrawledUniversity[] {
+    const results: CrawledUniversity[] = [];
 
-    // 匹配院校链接的模式
-    // 实际 URL 格式: /sch/schoolInfo--schId-xxx.dhtml
-    const pattern = /href="(\/sch\/schoolInfo--schId-[^"]+\.dhtml)"[^>]*>([^<]+)<\/a>/g;
-    let match: RegExpExecArray | null;
+    // 匹配每个 sch-item 块
+    const blockPattern = /<div\s+class="sch-item"[^>]*@click="window\.open\('([^']+)'[^"]*"\)[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*(?:<div\s+class="manyidu|<\/div>\s*<\/div>\s*<div\s+class="manyidu)/g;
 
-    while ((match = pattern.exec(html)) !== null) {
-      links.push({
-        url: this.baseUrl + match[1],
-        name: this.cleanText(match[2]),
-      });
+    // 简化：先按 sch-item 分割，再逐个解析
+    const blocks = html.split('class="sch-item"');
+
+    for (let i = 1; i < blocks.length; i++) {
+      const block = blocks[i];
+      try {
+        const uni = this.parseBlock(block);
+        if (uni) results.push(uni);
+      } catch {
+        // skip unparseable blocks
+      }
     }
 
-    return links;
+    return results;
   }
 
-  /**
-   * 解析单个院校详情页面
-   */
-  private async parseSchoolPage(url: string, name: string): Promise<CrawledUniversity | null> {
-    const html = await this.fetchPage(url);
+  private parseBlock(block: string): CrawledUniversity | null {
+    // 提取 schId URL
+    const urlMatch = block.match(/window\.open\('([^']+)'/);
+    if (!urlMatch) return null;
+    const sourceUrl = this.baseUrl + urlMatch[1];
 
-    // 从 HTML 中提取院校信息
-    // 实际实现需要根据页面 DOM 结构调整
-    const province = this.extractField(html, '院校隶属|所在省份') ?? '';
-    const tier = this.extractField(html, '院校类型|院校层次') ?? '';
-    const schoolType = this.extractField(html, '院校特性|办学类型') ?? '';
-    const website = this.extractField(html, '官方网址|学校网址') ?? '';
+    // 提取院校名称
+    const nameMatch = block.match(/class="name[^"]*"[^>]*>\s*([\u4e00-\u9fa5A-Za-z\s·]+?)\s*<\/span>/);
+    if (!nameMatch) return null;
+    const name = this.cleanText(nameMatch[1]);
+    if (!name) return null;
 
-    if (!province) return null;
+    // 提取省份（在 sch-department 中，| 分隔符前）
+    const deptMatch = block.match(/class="sch-department"[\s\S]*?iconfont[^>]*>[^<]*<\/i>([^<|]+)/);
+    const province = deptMatch ? this.cleanText(deptMatch[1]) : '';
+
+    // 提取主管部门
+    const adminMatch = block.match(/主管部门：<\/span>([^<]+)/);
+    const affiliated = adminMatch ? this.cleanText(adminMatch[1]) : undefined;
+
+    // 提取层次标签
+    const tags: string[] = [];
+    const tagPattern = /class="sch-level-tag">([^<]+)<\/div>/g;
+    let tagMatch: RegExpExecArray | null;
+    while ((tagMatch = tagPattern.exec(block)) !== null) {
+      tags.push(this.cleanText(tagMatch[1]));
+    }
+
+    const tier = this.normalizeTier(tags.join(' '));
+    const schoolType = this.normalizeSchoolType(tags.join(' '));
+    const is985 = tags.some(t => /985/.test(t));
+    const is211 = tags.some(t => /211/.test(t));
+    const isDualFirstClass = tags.some(t => /双一流/.test(t));
 
     return {
       name,
       province,
-      tier: this.normalizeTier(tier),
-      schoolType: this.normalizeSchoolType(schoolType),
-      website: website.startsWith('http') ? website : undefined,
-      is985: /985/.test(tier),
-      is211: /211/.test(tier),
-      isDualFirstClass: /双一流/.test(tier),
-      sourceUrl: url,
+      tier,
+      schoolType,
+      is985,
+      is211,
+      isDualFirstClass,
+      affiliated,
+      sourceUrl,
       sourceName: this.sourceName,
+      tags: tags.length > 0 ? tags : undefined,
     };
-  }
-
-  /**
-   * 从 HTML 中通过标签文本提取字段值
-   */
-  private extractField(html: string, labelPattern: string): string | undefined {
-    const regex = new RegExp(
-      `(?:${labelPattern})[^<]*<[^>]*>[^<]*<[^>]*>\\s*([^<]+)`,
-      'i',
-    );
-    const match = html.match(regex);
-    return match ? this.cleanText(match[1]) : undefined;
   }
 
   /** 标准化院校层次 */

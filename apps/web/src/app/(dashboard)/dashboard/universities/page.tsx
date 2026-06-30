@@ -88,6 +88,7 @@ const schoolTypes = ['综合', '理工', '师范', '医药', '农林', '财经',
 
 export default function UniversitiesPage() {
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [province, setProvince] = useState('');
   const [tier, setTier] = useState('');
   const [schoolType, setSchoolType] = useState('');
@@ -108,12 +109,23 @@ export default function UniversitiesPage() {
 
   const totalPages = Math.ceil(total / pageSize);
 
+  // 搜索防抖
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  // 搜索词变化时重置页码
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedQuery]);
+
   // 查询院校列表
   const fetchUniversities = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (query) params.set('name', query);
+      if (debouncedQuery) params.set('name', debouncedQuery);
       if (province) params.set('province', province);
       if (tier) params.set('tier', tier);
       if (schoolType) params.set('school_type', schoolType);
@@ -133,7 +145,7 @@ export default function UniversitiesPage() {
     } finally {
       setLoading(false);
     }
-  }, [query, province, tier, schoolType, is985, is211, page, pageSize]);
+  }, [debouncedQuery, province, tier, schoolType, is985, is211, page, pageSize]);
 
   useEffect(() => {
     fetchUniversities();
@@ -201,7 +213,7 @@ export default function UniversitiesPage() {
             type="text"
             placeholder="搜索院校名称..."
             value={query}
-            onChange={(e) => { setQuery(e.target.value); setPage(1); }}
+            onChange={(e) => setQuery(e.target.value)}
             className="w-full rounded-xl border border-border bg-surface py-2.5 pl-10 pr-10 text-sm text-text-primary placeholder:text-text-tertiary focus:border-blue focus:outline-none focus:ring-2 focus:ring-blue/20"
           />
           {query && (
