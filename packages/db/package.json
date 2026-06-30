@@ -17,6 +17,8 @@
     "@supabase/supabase-js": "^2.49.0"
   },
   "devDependencies": {
+    "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
     "typescript": "^5.7.0"
   }
 }
