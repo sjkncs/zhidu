@@ -649,3 +649,6 @@ export type {
   StructuredQueryResult,
   QueryExecutor,
 } from './structured-query-agent';
+
+// Re-export Supabase query executor (Phase 15d)
+export { SupabaseQueryExecutor } from './supabase-query-executor';

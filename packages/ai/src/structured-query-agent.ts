@@ -11,7 +11,9 @@ import { extractEntities } from './intent-classifier';
 
 export type StructuredQueryType =
   | 'UNIVERSITY_SEARCH'      // 按分数/位次搜索院校
+  | 'UNIVERSITY_INFO'        // 院校详情（排名、学科评估、基本信息）
   | 'MAJOR_RECOMMEND'        // 专业推荐
+  | 'MAJOR_INFO'             // 专业详情（薪资、就业、开设院校）
   | 'SCORE_COMPARE'          // 分数对比（历年分数线）
   | 'RANK_ESTIMATE'          // 位次估算
   | 'CAREER_SALARY'          // 就业薪资查询
@@ -56,7 +58,9 @@ const QUERY_PARSER_SYSTEM = `你是智渡平台的结构化查询解析器。将
 
 ## 查询类型
 - UNIVERSITY_SEARCH: 按分数/位次搜索可报考的院校（"XX分能上什么大学"、"位次XXXX有哪些学校"）
+- UNIVERSITY_INFO: 查询院校详情、排名、学科评估（"XX大学怎么样"、"XX大学排名"、"XX大学学科评估"、"985大学有哪些"、"XX省的大学"）
 - MAJOR_RECOMMEND: 专业推荐（"什么专业适合我"、"推荐几个专业"）
+- MAJOR_INFO: 查询专业详情、薪资、就业（"计算机专业学什么"、"XX专业就业前景"、"XX专业薪资"、"XX专业哪些学校开设"）
 - SCORE_COMPARE: 历年分数线对比（"XX大学近三年分数线"、"XX专业录取分数变化"）
 - RANK_ESTIMATE: 位次估算（"XX分相当于去年多少分"、"位次换算"）
 - CAREER_SALARY: 就业薪资查询（"计算机专业毕业薪资"、"XX专业就业前景"）
@@ -76,7 +80,18 @@ const QUERY_PARSER_SYSTEM = `你是智渡平台的结构化查询解析器。将
   },
   "sort": { "field": "minScore", "direction": "desc" },
   "explanation": "查询广东省2024年物理类620分可报考的稳档院校"
-}`;
+}
+
+## UNIVERSITY_INFO 示例
+用户问"北京大学怎么样"或"清华大学排名"：
+{ "type": "UNIVERSITY_INFO", "filters": { "universityName": "北京大学" }, "explanation": "查询北京大学详情" }
+
+用户问"985大学有哪些"或"广东的大学"：
+{ "type": "UNIVERSITY_INFO", "filters": { "tier": "985", "province": "广东", "limit": 20 }, "explanation": "查询985院校列表" }
+
+## MAJOR_INFO 示例
+用户问"计算机科学与技术专业怎么样"：
+{ "type": "MAJOR_INFO", "filters": { "majorName": "计算机科学与技术" }, "explanation": "查询计算机科学与技术专业详情" }`;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 数据库查询执行器
@@ -90,6 +105,23 @@ export interface QueryExecutor {
     minScore?: number;
     maxScore?: number;
     tier?: string;
+    limit?: number;
+  }): Promise<unknown[]>;
+
+  /** 查询院校详情（含排名、学科评估） */
+  getUniversityInfo(params: {
+    universityName?: string;
+    universityId?: string;
+    province?: string;
+    tier?: string;
+    limit?: number;
+  }): Promise<unknown[]>;
+
+  /** 查询专业详情（含薪资、开设院校） */
+  getMajorInfo(params: {
+    majorName?: string;
+    majorId?: string;
+    category?: string;
     limit?: number;
   }): Promise<unknown[]>;
 
@@ -226,6 +258,42 @@ export class StructuredQueryAgent {
           };
         }
 
+        case 'UNIVERSITY_INFO': {
+          const data = await this.executor.getUniversityInfo({
+            universityName: filters.universityName,
+            universityId: filters.universityId,
+            province: filters.province,
+            tier: filters.tier,
+            limit: filters.limit ?? 10,
+          });
+
+          return {
+            query: structuredQuery,
+            data,
+            total: data.length,
+            message: data.length > 0
+              ? `查询到 ${data.length} 所院校信息`
+              : '未找到匹配的院校信息。',
+          };
+        }
+
+        case 'MAJOR_INFO': {
+          const data = await this.executor.getMajorInfo({
+            majorName: filters.majorName,
+            majorId: filters.majorId,
+            limit: filters.limit ?? 5,
+          });
+
+          return {
+            query: structuredQuery,
+            data,
+            total: data.length,
+            message: data.length > 0
+              ? `查询到 ${data.length} 个专业信息`
+              : '未找到匹配的专业信息。',
+          };
+        }
+
         case 'SCORE_COMPARE': {
           if (!filters.province) {
             return {
@@ -335,6 +403,10 @@ export class StructuredQueryAgent {
 
     if (/能上|报哪|推荐.*大学|什么.*学校|可以报/.test(q)) {
       type = 'UNIVERSITY_SEARCH';
+    } else if (/大学.*怎么样|大学.*排名|学科评估|985.*大学|211.*大学|双一流|有哪些大学|省的大学/.test(q)) {
+      type = 'UNIVERSITY_INFO';
+    } else if (/专业.*学什么|专业.*怎么样|专业.*就业|专业.*薪资|哪些学校开设|专业.*前景/.test(q)) {
+      type = 'MAJOR_INFO';
     } else if (/分数线|录取分|历年|变化/.test(q)) {
       type = 'SCORE_COMPARE';
     } else if (/位次|排名.*多少|换算/.test(q)) {

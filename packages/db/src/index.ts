@@ -82,7 +82,26 @@ export interface UniversityRow {
   logo?: string;
   /** 标签（如：综合类、理工类） */
   tags?: string[];
+  // Migration 012 扩展字段
+  is985?: boolean;
+  is211?: boolean;
+  isDualFirstClass?: boolean;
+  foundingYear?: number;
+  schoolType?: string;
+  educationLevel?: string;
+  masterPrograms?: number;
+  doctoralPrograms?: number;
+  genderRatio?: string;
+  admissionPhone?: string;
+  nationalSpecialties?: string[];
+  disciplineEvaluation?: Record<string, string>;
+  description?: string;
+  motto?: string;
+  affiliated?: string;
+  dataSource?: string;
+  dataYear?: number;
   createdAt: string;
+  updatedAt?: string;
 }
 
 /** 专业信息表 */
@@ -94,6 +113,67 @@ export interface MajorRow {
   degree: string;
   subjectRequirements?: string[];
   description?: string;
+  // Migration 012 扩展字段
+  majorCode?: string;
+  disciplineCategory?: string;
+  genderRatio?: string;
+  employmentRate?: number;
+  employmentRates?: Record<string, number>;
+  whatDescription?: string;
+  studyDescription?: string;
+  careerDescription?: string;
+  coreCourses?: string[];
+  graduatePaths?: string[];
+  certifications?: string[];
+  notableAlumni?: string[];
+  offeringSchools?: Array<{ name: string; tier?: string }>;
+  dataSource?: string;
+  dataYear?: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+/** 院校排名表 */
+export interface UniversityRankingRow {
+  id: string;
+  universityId?: string;
+  universityName: string;
+  source: string;
+  year: number;
+  rank?: number;
+  score?: number;
+  tags?: string[];
+  region?: string;
+  type?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+/** 学科评估表 */
+export interface DisciplineEvaluationRow {
+  id: string;
+  universityId?: string;
+  universityName: string;
+  disciplineName: string;
+  evaluationRound: string;
+  rating: string;
+  rankingPosition?: number;
+  createdAt: string;
+}
+
+/** 专业薪酬时间序列表 */
+export interface MajorSalaryDataRow {
+  id: string;
+  majorId?: string;
+  majorName: string;
+  year: number;
+  avgMonthlySalary?: number;
+  medianMonthlySalary?: number;
+  sampleSize?: number;
+  topIndustries?: Array<{ name: string; ratio?: number }>;
+  topCities?: Array<{ name: string; ratio?: number }>;
+  topOccupations?: Array<{ name: string; ratio?: number }>;
+  dataSource?: string;
   createdAt: string;
 }
 
@@ -624,6 +704,9 @@ export interface Database {
       employment_salaries: { Row: EmploymentSalaryRow };
       score_rank_tables: { Row: ScoreRankRow };
       major_groups: { Row: MajorGroupRow };
+      university_rankings: { Row: UniversityRankingRow };
+      discipline_evaluations: { Row: DisciplineEvaluationRow };
+      major_salary_data: { Row: MajorSalaryDataRow };
     };
   };
 }

@@ -17,6 +17,8 @@ import {
   StickyNote,
   Clock,
   Wallet,
+  Building2,
+  Layers,
 } from 'lucide-react';
 
 type IconComponent = React.ComponentType<{ className?: string }>;
@@ -175,11 +177,20 @@ export function QuickActions() {
           <Badge color="blue">新</Badge>
         </button>
         <button
-          onClick={() => router.push('/dashboard/knowledge')}
+          onClick={() => router.push('/dashboard/universities')}
           className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm text-text-secondary transition-colors hover:bg-surface-elevated hover:text-text-primary"
         >
-          <BookOpen className="h-4 w-4" />
+          <Building2 className="h-4 w-4" />
           <span>浏览院校库</span>
+          <Badge color="blue">新</Badge>
+        </button>
+        <button
+          onClick={() => router.push('/dashboard/majors')}
+          className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm text-text-secondary transition-colors hover:bg-surface-elevated hover:text-text-primary"
+        >
+          <Layers className="h-4 w-4" />
+          <span>浏览专业库</span>
+          <Badge color="blue">新</Badge>
         </button>
         <button
           onClick={() => router.push('/dashboard/diary')}
