@@ -652,3 +652,11 @@ export type {
 
 // Re-export Supabase query executor (Phase 15d)
 export { SupabaseQueryExecutor } from './supabase-query-executor';
+
+// Re-export ML predict client (Phase 16 ML)
+export {
+  predictAdmission,
+  predictBatch,
+  isMLServiceAvailable,
+} from './ml-predict-client';
+export type { MLPredictInput, MLPredictResult } from './ml-predict-client';

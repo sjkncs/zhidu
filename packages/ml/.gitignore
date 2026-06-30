@@ -1,0 +1,8 @@
+# ML 输出文件（模型太大不入库）
+output/data/*.csv
+output/models/*.pkl
+output/models/*.json
+output/models/*.txt
+output/models/*.pth
+__pycache__/
+*.pyc

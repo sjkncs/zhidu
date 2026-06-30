@@ -8,6 +8,13 @@
  */
 
 import { createClient, type SupabaseClient, type Database } from '@zhidu/db';
+import {
+  predictAdmission,
+  predictBatch,
+  isMLServiceAvailable,
+  type MLPredictInput,
+  type MLPredictResult,
+} from './ml-predict-client';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -55,6 +62,13 @@ export interface MatchResult {
   lineDiff: number;
   /** 数据置信度 high/medium/low */
   confidence: 'high' | 'medium' | 'low';
+  /** 是否使用 ML 模型预测 */
+  mlUsed?: boolean;
+  /** ML 模型概率明细 */
+  mlDetail?: {
+    xgboostProb: number;
+    lightgbmProb: number;
+  };
   /** 备注（基地班、中外合作等） */
   note?: string;
   /** 就业薪资参考 */
@@ -102,6 +116,7 @@ export class VolunteerMatchingEngine {
 
   /**
    * 主入口：生成冲稳保推荐列表
+   * 当 ML 服务可用时，自动融合 ML 预测概率（XGBoost + LightGBM ensemble）
    */
   async recommend(query: VolunteerQuery): Promise<VolunteerRecommendation> {
     // 1. 获取考生位次
@@ -116,11 +131,45 @@ export class VolunteerMatchingEngine {
     // 3. 查询历年录取数据（近 3-5 年）
     const historicalData = await this.getHistoricalAdmissions(query);
 
-    // 4. 对每个院校专业组合计算概率
+    // 4. ML 批量预测（可选）
+    const mlAvailable = await isMLServiceAvailable();
+    let mlResults: (MLPredictResult | undefined)[] = [];
+
+    if (mlAvailable && historicalData.length > 0) {
+      const mlInputs: MLPredictInput[] = historicalData.map((record) => {
+        const historicalRanks = record.ranks.filter((r) => r != null) as number[];
+        const weightedMinRank = historicalRanks.length > 0
+          ? historicalRanks.reduce((s, r) => s + r, 0) / historicalRanks.length
+          : rank;
+        const minScore = Math.min(...record.scores.map((s) => s.minScore));
+        const avgScore = record.scores.reduce((s, r) => s + (r.avgScore ?? r.minScore), 0) / record.scores.length;
+
+        return {
+          studentRank: rank,
+          minRank: weightedMinRank,
+          minScore,
+          avgScore: Math.round(avgScore),
+          year: query.year,
+          lineDiff: query.score - currentScoreLine,
+          scoreSpread: Math.round(avgScore - minScore),
+          scoreLineEst: currentScoreLine,
+        };
+      });
+
+      try {
+        mlResults = await predictBatch(mlInputs);
+      } catch {
+        mlResults = [];
+      }
+    }
+
+    // 5. 对每个院校专业组合计算概率（规则 + ML 融合）
     const results: MatchResult[] = [];
 
-    for (const record of historicalData) {
-      const result = await this.calculateMatch(record, query, rank, currentScoreLine);
+    for (let i = 0; i < historicalData.length; i++) {
+      const record = historicalData[i];
+      const mlResult = mlResults[i];
+      const result = await this.calculateMatch(record, query, rank, currentScoreLine, mlResult);
       if (result) {
         results.push(result);
       }
@@ -274,13 +323,14 @@ export class VolunteerMatchingEngine {
   // ─── 综合计算 ──────────────────────────────────────────────────────────────
 
   /**
-   * 综合位次法和线差法的结果
+   * 综合位次法和线差法的结果，可选融合 ML 模型预测
    */
   private async calculateMatch(
     record: HistoricalRecord,
     query: VolunteerQuery,
     studentRank: number,
     currentScoreLine: number,
+    mlResult?: MLPredictResult,
   ): Promise<MatchResult | null> {
     const historicalRanks = record.ranks.filter((r) => r != null) as number[];
     const historicalScores = record.scores.map((s, i) => ({
@@ -288,24 +338,41 @@ export class VolunteerMatchingEngine {
       scoreLine: record.scoreLines[i] ?? currentScoreLine,
     }));
 
-    // 位次法
+    // 位次法（规则引擎）
     const rankResult = this.rankMethod(studentRank, historicalRanks);
 
-    // 线差法
+    // 线差法（规则引擎）
     const lineResult = this.lineDiffMethod(
       query.score,
       currentScoreLine,
       historicalScores,
     );
 
-    // 综合概率（位次法权重 60%，线差法权重 40%）
-    // 位次法更稳定，线差法作为辅助验证
-    let combinedProbability: number;
+    // 规则综合概率（位次法权重 60%，线差法权重 40%）
+    let ruleProbability: number;
     if (historicalRanks.length > 0) {
-      combinedProbability = rankResult.probability * 0.6 + lineResult.probability * 0.4;
+      ruleProbability = rankResult.probability * 0.6 + lineResult.probability * 0.4;
     } else {
-      // 没有位次数据时只用线差法（降低置信度）
-      combinedProbability = lineResult.probability;
+      ruleProbability = lineResult.probability;
+    }
+    ruleProbability = Math.round(Math.max(1, Math.min(99, ruleProbability)));
+
+    // ML 融合：当 ML 服务可用时，ML 70% + 规则 30%
+    let combinedProbability: number;
+    let mlUsed = false;
+    let mlDetail: MatchResult['mlDetail'];
+
+    if (mlResult && mlResult.mlUsed) {
+      combinedProbability = Math.round(
+        mlResult.probability * 0.7 + ruleProbability * 0.3,
+      );
+      mlUsed = true;
+      mlDetail = {
+        xgboostProb: mlResult.xgboostProb,
+        lightgbmProb: mlResult.lightgbmProb,
+      };
+    } else {
+      combinedProbability = ruleProbability;
     }
 
     combinedProbability = Math.round(Math.max(1, Math.min(99, combinedProbability)));
@@ -318,9 +385,15 @@ export class VolunteerMatchingEngine {
 
     // 数据置信度
     let confidence: 'high' | 'medium' | 'low';
-    if (record.scores.length >= 3 && historicalRanks.length >= 2) confidence = 'high';
-    else if (record.scores.length >= 2) confidence = 'medium';
-    else confidence = 'low';
+    if (mlUsed && mlResult?.confidence === 'high' && record.scores.length >= 2) {
+      confidence = 'high';
+    } else if (record.scores.length >= 3 && historicalRanks.length >= 2) {
+      confidence = 'high';
+    } else if (record.scores.length >= 2) {
+      confidence = 'medium';
+    } else {
+      confidence = 'low';
+    }
 
     const minScore = Math.min(...record.scores.map((s) => s.minScore));
     const avgScore = record.scores.reduce((s, r) => s + (r.avgScore ?? r.minScore), 0) / record.scores.length;
@@ -339,6 +412,8 @@ export class VolunteerMatchingEngine {
       equivalentScore: lineResult.equivalentScore,
       lineDiff: query.score - currentScoreLine,
       confidence,
+      mlUsed,
+      mlDetail,
       note: record.note,
     };
   }

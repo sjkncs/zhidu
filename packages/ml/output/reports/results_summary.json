@@ -1,0 +1,22 @@
+{
+  "xgboost": {
+    "name": "XGBoost",
+    "auc": 0.9986,
+    "brier": 0.0114,
+    "log_loss": 0.04,
+    "accuracy": 0.9842,
+    "precision": 0.988,
+    "recall": 0.9796,
+    "f1": 0.9838
+  },
+  "lightgbm": {
+    "name": "LightGBM",
+    "auc": 0.9974,
+    "brier": 0.0136,
+    "log_loss": 0.0954,
+    "accuracy": 0.9792,
+    "precision": 0.9812,
+    "recall": 0.9762,
+    "f1": 0.9787
+  }
+}
