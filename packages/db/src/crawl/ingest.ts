@@ -162,7 +162,7 @@ async function ingestAdmissionScore(
 
   const { error } = await db
     .from('admission_scores')
-    .upsert(row, { onConflict: 'university_id,province,year' });
+    .upsert(row, { onConflict: 'university_id,major_id,province,year' });
 
   if (error) throw error;
 }
