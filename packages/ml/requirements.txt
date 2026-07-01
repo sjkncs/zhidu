@@ -9,5 +9,6 @@ seaborn>=0.12
 flask>=3.0
 flask-cors>=4.0
 joblib>=1.3
+gunicorn>=22.0  # 生产部署
 torch>=2.0  # 可选，PyTorch MLP 模型
 supabase>=2.0  # 数据导出

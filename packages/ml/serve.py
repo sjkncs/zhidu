@@ -56,6 +56,17 @@ _feature_meta = None
 
 _rate_store: dict[str, dict] = {}
 
+# ─── 请求指标（简易监控）───────────────────────────────────────────────────
+
+_metrics = {
+    'requests_total': 0,
+    'requests_success': 0,
+    'requests_error': 0,
+    'batch_requests': 0,
+    'start_time': time.time(),
+    'latency_sum_ms': 0.0,
+}
+
 
 def _check_rate_limit(client_ip: str) -> bool:
     now = time.time()
@@ -242,12 +253,34 @@ def before_request_hook():
 @app.route('/health', methods=['GET'])
 def health():
     models_loaded = _xgb_model is not None
+    uptime = time.time() - _metrics['start_time']
     return jsonify({
         'status': 'ok',
         'model': 'admission-predictor',
         'models_loaded': models_loaded,
         'feature_version': (_feature_meta or {}).get('version', 'unknown'),
         'feature_count': len(FEATURE_NAMES),
+        'uptime_seconds': round(uptime, 1),
+        'requests_total': _metrics['requests_total'],
+    })
+
+
+@app.route('/metrics', methods=['GET'])
+def metrics():
+    """简易指标端点 — 供 Prometheus / 监控平台拉取"""
+    uptime = time.time() - _metrics['start_time']
+    total = _metrics['requests_total'] or 1
+    avg_latency = _metrics['latency_sum_ms'] / total
+    return jsonify({
+        'uptime_seconds': round(uptime, 1),
+        'requests_total': _metrics['requests_total'],
+        'requests_success': _metrics['requests_success'],
+        'requests_error': _metrics['requests_error'],
+        'batch_requests': _metrics['batch_requests'],
+        'avg_latency_ms': round(avg_latency, 2),
+        'models_loaded': _xgb_model is not None,
+        'feature_count': len(FEATURE_NAMES),
+        'rate_limited_ips': len(_rate_store),
     })
 
 
@@ -271,11 +304,15 @@ def predict_endpoint():
     """
     data = request.get_json()
     if not data:
+        _metrics['requests_total'] += 1
+        _metrics['requests_error'] += 1
         return jsonify({'error': 'Missing JSON body'}), 400
 
     # 输入验证
     error = validate_prediction_input(data)
     if error:
+        _metrics['requests_total'] += 1
+        _metrics['requests_error'] += 1
         return jsonify({'error': error}), 400
 
     model = data.pop('model', 'ensemble')
@@ -283,12 +320,20 @@ def predict_endpoint():
         return jsonify({'error': f'Invalid model: {model}. Must be one of: {VALID_MODELS}'}), 400
 
     try:
+        t0 = time.time()
         features = build_features(**data)
         result = predict(features, model=model)
+        _metrics['requests_total'] += 1
+        _metrics['requests_success'] += 1
+        _metrics['latency_sum_ms'] += (time.time() - t0) * 1000
         return jsonify({'status': 'ok', 'data': result})
     except TypeError as e:
+        _metrics['requests_total'] += 1
+        _metrics['requests_error'] += 1
         return jsonify({'error': f'Invalid parameters: {str(e)}'}), 400
     except Exception as e:
+        _metrics['requests_total'] += 1
+        _metrics['requests_error'] += 1
         logger.error(f"Prediction error: {e}")
         return jsonify({'error': 'Internal prediction error'}), 500
 
@@ -341,6 +386,11 @@ def predict_batch():
             results.append({'index': i, **result})
         except Exception as e:
             errors.append({'index': i, 'error': str(e)})
+
+    _metrics['requests_total'] += 1
+    _metrics['batch_requests'] += 1
+    _metrics['requests_success'] += len(results)
+    _metrics['requests_error'] += len(errors)
 
     return jsonify({
         'status': 'ok',
