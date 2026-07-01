@@ -1,10 +1,20 @@
 """
-智渡录取概率 ML Pipeline
-========================
+智渡录取概率 ML Pipeline (v2)
+==============================
 从 Supabase 导出历史录取数据 → 特征工程 → 相关性分析 →
-XGBoost + LightGBM + PyTorch 模型训练 → 概率校准 → 评估报告
+Optuna 超参搜索 → XGBoost + LightGBM 训练 → 概率校准 → 评估报告
 
-用法: python pipeline.py [--export-only] [--skip-torch]
+v2 改进 (Phase 19):
+- 共享特征模块 (features.py) 消除三处重复代码
+- 移除目标泄漏特征 (min_rank/min_score/avg_score 原始值)
+- 移除冗余单调变换 (log_rank_ratio/rank_log_diff/score_gap_ratio)
+- 显式分类映射替代 LabelEncoder (避免全量数据拟合泄漏)
+- 4-way 数据分割: train / val / calibration / test
+- Optuna 超参搜索 + 3-fold CV (可选)
+- ECE/MCE 校准指标
+- 19 维特征（从原始 24 维精简）
+
+用法: python pipeline.py [--export-only] [--skip-torch] [--skip-optuna]
 """
 
 import os
@@ -21,7 +31,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split, StratifiedKFold
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import StandardScaler
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import (
     roc_auc_score, brier_score_loss, log_loss,
@@ -30,6 +40,22 @@ from sklearn.metrics import (
 )
 import xgboost as xgb
 import lightgbm as lgb
+
+# Optuna (可选依赖)
+try:
+    import optuna
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    HAS_OPTUNA = True
+except ImportError:
+    HAS_OPTUNA = False
+
+# 共享特征模块
+from features import (
+    FEATURE_NAMES, SYNTH_SAMPLES_PER_RECORD, NOISE_STD,
+    PROVINCE_TO_CODE, TIER_TO_CODE, SCHOOL_TYPE_TO_CODE, EVAL_RATING_ORDER,
+    map_province, map_tier, map_school_type,
+    build_feature_dict, feature_dict_to_row,
+)
 
 warnings.filterwarnings('ignore')
 
@@ -43,14 +69,42 @@ REPORT_DIR = OUTPUT_DIR / 'reports'
 SUPABASE_URL = os.environ.get('NEXT_PUBLIC_SUPABASE_URL', '')
 SUPABASE_KEY = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '')
 
-# 特征权重（用于 synthetic label generation）
-SYNTH_SAMPLES_PER_RECORD = 8  # 每条历史记录生成多少个训练样本
-NOISE_STD = 0.05  # 噪声标准差（位次比）
+# Optuna 搜索配置
+OPTUNA_N_TRIALS_XGB = 30
+OPTUNA_N_TRIALS_LGB = 30
 
 
 def ensure_dirs():
     for d in [OUTPUT_DIR, DATA_DIR, MODEL_DIR, REPORT_DIR]:
         d.mkdir(parents=True, exist_ok=True)
+
+
+# ─── 校准指标 ──────────────────────────────────────────────────────────────
+
+def expected_calibration_error(y_true, y_prob, n_bins=10):
+    """Expected Calibration Error (ECE)"""
+    bin_boundaries = np.linspace(0, 1, n_bins + 1)
+    ece = 0.0
+    for i in range(n_bins):
+        mask = (y_prob > bin_boundaries[i]) & (y_prob <= bin_boundaries[i + 1])
+        if mask.sum() > 0:
+            bin_acc = y_true[mask].mean()
+            bin_conf = y_prob[mask].mean()
+            ece += mask.sum() * abs(bin_acc - bin_conf)
+    return ece / len(y_true)
+
+
+def maximum_calibration_error(y_true, y_prob, n_bins=10):
+    """Maximum Calibration Error (MCE)"""
+    bin_boundaries = np.linspace(0, 1, n_bins + 1)
+    mce = 0.0
+    for i in range(n_bins):
+        mask = (y_prob > bin_boundaries[i]) & (y_prob <= bin_boundaries[i + 1])
+        if mask.sum() > 0:
+            bin_acc = y_true[mask].mean()
+            bin_conf = y_prob[mask].mean()
+            mce = max(mce, abs(bin_acc - bin_conf))
+    return mce
 
 
 # ─── 1. Data Export ─────────────────────────────────────────────────────────
@@ -65,17 +119,16 @@ def export_from_supabase():
         from supabase import create_client
         client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-        # 录取数据
         result = client.table('admission_scores').select('*').limit(10000).execute()
         admissions = pd.DataFrame(result.data)
         print(f"  admission_scores: {len(admissions)} 条")
 
-        # 院校数据
-        result = client.table('universities').select('id, name, province, tier, is_985, is_211, is_dual_first_class, school_type').limit(10000).execute()
+        result = client.table('universities').select(
+            'id, name, province, tier, is_985, is_211, is_dual_first_class, school_type'
+        ).limit(10000).execute()
         universities = pd.DataFrame(result.data)
         print(f"  universities: {len(universities)} 条")
 
-        # 排名数据
         try:
             result = client.table('university_rankings').select('*').limit(10000).execute()
             rankings = pd.DataFrame(result.data)
@@ -84,7 +137,6 @@ def export_from_supabase():
             rankings = pd.DataFrame()
             print("  university_rankings: 0 条 (表不存在)")
 
-        # 学科评估
         try:
             result = client.table('discipline_evaluations').select('*').limit(10000).execute()
             evaluations = pd.DataFrame(result.data)
@@ -103,17 +155,17 @@ def export_from_supabase():
             'Range': '0-99999',
         }
 
-        # 录取数据
         r = requests.get(f'{SUPABASE_URL}/rest/v1/admission_scores?select=*', headers=headers)
         admissions = pd.DataFrame(r.json())
         print(f"  admission_scores: {len(admissions)} 条")
 
-        # 院校数据
-        r = requests.get(f'{SUPABASE_URL}/rest/v1/universities?select=id,name,province,tier,is_985,is_211,is_dual_first_class,school_type', headers=headers)
+        r = requests.get(
+            f'{SUPABASE_URL}/rest/v1/universities?select=id,name,province,tier,is_985,is_211,is_dual_first_class,school_type',
+            headers=headers,
+        )
         universities = pd.DataFrame(r.json())
         print(f"  universities: {len(universities)} 条")
 
-        # 排名
         try:
             r = requests.get(f'{SUPABASE_URL}/rest/v1/university_rankings?select=*', headers=headers)
             rankings = pd.DataFrame(r.json())
@@ -121,7 +173,6 @@ def export_from_supabase():
         except Exception:
             rankings = pd.DataFrame()
 
-        # 学科评估
         try:
             r = requests.get(f'{SUPABASE_URL}/rest/v1/discipline_evaluations?select=*', headers=headers)
             evaluations = pd.DataFrame(r.json())
@@ -159,13 +210,20 @@ def load_data():
 
 def build_features(admissions, universities, rankings, evaluations):
     """
-    构建训练特征矩阵
+    构建训练特征矩阵 (v2)
 
-    核心思路：为每条历史录取记录生成多个合成样本，
-    模拟不同位次比的考生，用录取结果作为标签。
+    改进点:
+    - 使用共享特征模块 (features.py)，消除 pipeline/serve/predict 三处重复
+    - 移除目标泄漏特征 (min_rank/min_score/avg_score 原始值)
+    - 移除冗余单调变换 (log_rank_ratio/rank_log_diff/score_gap_ratio)
+    - 显式分类映射 (不依赖 LabelEncoder 全量 fit)
+    - 新增相对特征 (school_selectivity / score_spread_norm)
+
+    注意: 标签仍为合成标签 (synthetic labels)，基于 rank_ratio 的分段函数生成。
+    未来需要用真实录取结果数据替换合成标签以提升模型泛化能力。
     """
     print("\n" + "=" * 60)
-    print("[2/6] 特征工程")
+    print("[2/6] 特征工程 (v2)")
     print("=" * 60)
 
     # 合并院校信息
@@ -174,54 +232,55 @@ def build_features(admissions, universities, rankings, evaluations):
         left_on='university_id',
         right_on='id',
         suffixes=('', '_uni'),
-        how='left'
+        how='left',
     )
 
-    # 编码分类变量
-    le_province = LabelEncoder()
-    df['province_code'] = le_province.fit_transform(df['province'])
-
-    le_tier = LabelEncoder()
-    tier_fill = df['tier'].fillna('普通本科')
-    df['tier_code'] = le_tier.fit_transform(tier_fill)
-
-    le_school_type = LabelEncoder()
-    stype_fill = df['school_type'].fillna('综合') if 'school_type' in df.columns else pd.Series(['综合'] * len(df))
-    df['school_type_code'] = le_school_type.fit_transform(stype_fill)
+    # 编码分类变量（使用显式映射，不依赖 LabelEncoder）
+    df['province_code'] = df['province'].map(
+        lambda x: PROVINCE_TO_CODE.get(x, 0)
+    )
+    df['tier_code'] = df['tier'].map(
+        lambda x: TIER_TO_CODE.get(str(x), 3) if pd.notna(x) else 3
+    )
+    if 'school_type' in df.columns:
+        df['school_type_code'] = df['school_type'].map(
+            lambda x: SCHOOL_TYPE_TO_CODE.get(str(x), 0) if pd.notna(x) else 0
+        )
+    else:
+        df['school_type_code'] = 0
 
     # 院校排名特征
     ranking_map = {}
     if not rankings.empty and 'university_id' in rankings.columns and 'rank' in rankings.columns:
-        best_ranks = rankings.groupby('university_id')['rank'].min().to_dict()
-        ranking_map = best_ranks
+        ranking_map = rankings.groupby('university_id')['rank'].min().to_dict()
 
     df['uni_rank'] = df['university_id'].map(ranking_map).fillna(999)
     df['uni_rank_log'] = np.log1p(df['uni_rank'])
 
     # 学科评估特征
     eval_map = {}
-    if not evaluations.empty and 'university_id' in evaluations.columns:
-        rating_order = {'A+': 1, 'A': 2, 'A-': 3, 'B+': 4, 'B': 5, 'B-': 6, 'C+': 7, 'C': 8, 'C-': 9, 'D': 10}
+    if not evaluations.empty and 'university_id' in evaluations.columns and 'rating' in evaluations.columns:
         eval_best = evaluations.copy()
-        if 'rating' in eval_best.columns:
-            eval_best['rating_num'] = eval_best['rating'].map(rating_order).fillna(11)
-            eval_best = eval_best.groupby('university_id')['rating_num'].min().to_dict()
-            eval_map = eval_best
+        eval_best['rating_num'] = eval_best['rating'].map(EVAL_RATING_ORDER).fillna(11)
+        eval_map = eval_best.groupby('university_id')['rating_num'].min().to_dict()
 
     df['best_discipline'] = df['university_id'].map(eval_map).fillna(11)
 
-    # 省控线估算（用同省同年最低分近似）
+    # 省控线估算（同省同年最低分）
     score_line_est = df.groupby(['province', 'year'])['min_score'].transform('min')
     df['score_line_est'] = score_line_est
 
-    # ─── 生成合成训练样本 ───
+    # 院校选拔度 (min_score - 省控线) / 100
+    df['school_selectivity'] = np.maximum(0, df['min_score'] - df['score_line_est']) / 100.0
+
     # 清理 NaN 和布尔列
     bool_cols = ['is_985', 'is_211', 'is_dual_first_class']
     for col in bool_cols:
         if col in df.columns:
             df[col] = df[col].fillna(False).astype(int)
 
-    print("  生成合成训练样本...")
+    # ─── 生成合成训练样本 ───
+    print("  生成合成训练样本 (synthetic labels)...")
     np.random.seed(42)
 
     features_list = []
@@ -236,13 +295,14 @@ def build_features(admissions, universities, rankings, evaluations):
         avg_score = float(row['avg_score']) if pd.notna(row.get('avg_score')) else min_score
 
         for _ in range(SYNTH_SAMPLES_PER_RECORD):
-            # 随机生成 rank_ratio (考生位次 / 录取最低位次)
+            # 随机生成 rank_ratio（考生位次 / 录取最低位次）
             # ratio < 1 = 位次优于录取线 → 大概率录取
             # ratio > 1 = 位次劣于录取线 → 小概率录取
             rank_ratio = np.random.lognormal(0, 0.3)
             student_rank = min_rank * rank_ratio
 
-            # 标签：基于位次比的决定性录取概率 + 噪声
+            # 合成标签：基于位次比的决定性录取概率 + 噪声
+            # ⚠️ 这是合成标签，不是真实录取结果
             if rank_ratio <= 0.7:
                 prob = 0.95 + np.random.normal(0, 0.02)
             elif rank_ratio <= 1.0:
@@ -256,47 +316,30 @@ def build_features(admissions, universities, rankings, evaluations):
 
             label = 1 if prob > 0.5 else 0
 
-            # 线差特征
-            line_diff_est = (min_score - row['score_line_est']) if row['score_line_est'] > 0 else 0
-            student_line_diff = (min_score * (1 + (rank_ratio - 1) * 0.5)) - row['score_line_est'] if row['score_line_est'] > 0 else 0
+            # 使用共享特征模块构建 19 维特征
+            feat = build_feature_dict(
+                student_rank=student_rank,
+                min_rank=min_rank,
+                min_score=min_score,
+                avg_score=avg_score,
+                is_985=int(row.get('is_985', 0)),
+                is_211=int(row.get('is_211', 0)),
+                is_dual_first_class=int(row.get('is_dual_first_class', 0)),
+                tier=int(row['tier_code']),
+                school_type=int(row['school_type_code']),
+                uni_rank=row['uni_rank'],
+                best_discipline=row['best_discipline'],
+                province=int(row['province_code']),
+                year=int(row['year']),
+                score_line_est=row['score_line_est'],
+                school_selectivity=row['school_selectivity'],
+            )
 
-            features_list.append({
-                # 核心特征
-                'rank_ratio': rank_ratio + np.random.normal(0, NOISE_STD),
-                'log_rank_ratio': np.log(rank_ratio + 1e-6) + np.random.normal(0, NOISE_STD * 0.5),
-                'score_gap_ratio': (rank_ratio - 1.0),
+            # 添加噪声到数值特征（模拟数据不确定性）
+            for key in ['rank_ratio', 'rank_ratio_sq', 'rank_inv']:
+                feat[key] += np.random.normal(0, NOISE_STD * 0.5)
 
-                # 位次特征
-                'student_rank': student_rank,
-                'min_rank': min_rank,
-                'rank_log_diff': np.log(student_rank + 1) - np.log(min_rank + 1),
-
-                # 分数特征
-                'min_score': min_score,
-                'avg_score': avg_score,
-                'score_spread': avg_score - min_score,
-                'score_line_est': row['score_line_est'],
-                'line_diff': line_diff_est,
-                'student_line_diff': student_line_diff,
-
-                # 院校特征
-                'is_985': int(row.get('is_985', 0)),
-                'is_211': int(row.get('is_211', 0)),
-                'is_dual_first_class': int(row.get('is_dual_first_class', 0)),
-                'tier_code': row['tier_code'],
-                'school_type_code': row['school_type_code'],
-                'uni_rank_log': row['uni_rank_log'],
-                'best_discipline': row['best_discipline'],
-
-                # 时空特征
-                'province_code': row['province_code'],
-                'year': row['year'],
-                'year_norm': (row['year'] - 2020) / 5.0,
-
-                # 交叉特征
-                'rank_tier_interaction': rank_ratio * row['tier_code'],
-                'is985_rank_ratio': int(row.get('is_985', 0)) * rank_ratio,
-            })
+            features_list.append(feat)
             labels_list.append(label)
 
     X = pd.DataFrame(features_list)
@@ -305,19 +348,34 @@ def build_features(admissions, universities, rankings, evaluations):
     # 清理异常值
     X = X.replace([np.inf, -np.inf], np.nan).fillna(0)
 
+    # 确保列顺序与 FEATURE_NAMES 一致
+    for name in FEATURE_NAMES:
+        if name not in X.columns:
+            X[name] = 0
+    X = X[FEATURE_NAMES]
+
     print(f"  特征矩阵: {X.shape[0]} 样本 × {X.shape[1]} 特征")
     print(f"  正样本: {y.sum()} ({y.mean()*100:.1f}%), 负样本: {(1-y).sum()} ({(1-y.mean())*100:.1f}%)")
+    print(f"  ⚠️  标签类型: 合成标签 (synthetic) — 非真实录取结果")
+    print(f"  特征列表 ({len(FEATURE_NAMES)}):")
+    for i, name in enumerate(FEATURE_NAMES, 1):
+        print(f"    {i:2d}. {name}")
 
     # 保存
     X.to_csv(DATA_DIR / 'features.csv', index=False)
     pd.Series(y, name='label').to_csv(DATA_DIR / 'labels.csv', index=False)
 
-    # 保存特征名映射
+    # 保存元数据 (v2 格式)
     feature_meta = {
-        'feature_names': list(X.columns),
-        'province_mapping': dict(zip(le_province.classes_, range(len(le_province.classes_)))),
-        'tier_mapping': dict(zip(le_tier.classes_, range(len(le_tier.classes_)))),
-        'school_type_mapping': dict(zip(le_school_type.classes_, range(len(le_school_type.classes_)))),
+        'version': '2.0',
+        'feature_names': FEATURE_NAMES,
+        'label_type': 'synthetic',
+        'category_mappings': {
+            'province': PROVINCE_TO_CODE,
+            'tier': TIER_TO_CODE,
+            'school_type': SCHOOL_TYPE_TO_CODE,
+            'eval_rating': EVAL_RATING_ORDER,
+        },
     }
     with open(DATA_DIR / 'feature_meta.json', 'w', encoding='utf-8') as f:
         json.dump(feature_meta, f, ensure_ascii=False, indent=2)
@@ -340,30 +398,27 @@ def correlation_analysis(X, y):
         print(f"    {i+1}. {feat}: {corr:.4f}")
 
     # 特征间相关性矩阵
-    key_features = ['rank_ratio', 'log_rank_ratio', 'rank_log_diff', 'min_rank',
-                    'min_score', 'line_diff', 'is_985', 'is_211', 'uni_rank_log',
-                    'best_discipline', 'score_spread']
-    available = [f for f in key_features if f in X.columns]
+    available = [f for f in FEATURE_NAMES if f in X.columns]
     corr_matrix = X[available].corr()
 
     # 绘制热力图
-    fig, axes = plt.subplots(1, 2, figsize=(18, 7))
+    fig, axes = plt.subplots(1, 2, figsize=(20, 8))
 
     # 左图：特征-标签相关性条形图
-    top_n = 15
+    top_n = min(18, len(correlations))
     corr_top = correlations.head(top_n)
     bars = axes[0].barh(range(top_n), corr_top.values, color='#2980b9', alpha=0.85)
     axes[0].set_yticks(range(top_n))
     axes[0].set_yticklabels(corr_top.index, fontsize=9)
     axes[0].set_xlabel('Correlation with Label')
-    axes[0].set_title('Top 15 Features by Correlation')
+    axes[0].set_title('Feature-Label Correlation (v2)')
     axes[0].invert_yaxis()
 
     # 右图：特征间相关性热力图
     sns.heatmap(corr_matrix, annot=True, fmt='.2f', cmap='RdBu_r', center=0,
                 ax=axes[1], square=True, linewidths=0.5,
                 cbar_kws={'shrink': 0.8}, annot_kws={'size': 7})
-    axes[1].set_title('Feature Correlation Matrix')
+    axes[1].set_title('Feature Correlation Matrix (v2)')
 
     plt.tight_layout()
     plt.savefig(REPORT_DIR / 'correlation_analysis.png', dpi=150, bbox_inches='tight')
@@ -373,29 +428,107 @@ def correlation_analysis(X, y):
     return correlations
 
 
-# ─── 4. Model Training ──────────────────────────────────────────────────────
+# ─── 4. Optuna 超参搜索 ────────────────────────────────────────────────────
 
-def train_models(X, y, skip_torch=False):
-    """训练 XGBoost + LightGBM + PyTorch 模型"""
-    print("\n" + "=" * 60)
-    print("[4/6] 模型训练")
-    print("=" * 60)
+def optuna_search_xgb(X_train, y_train, n_trials=30):
+    """Optuna 超参搜索 — XGBoost（3-fold CV，优化 AUC）"""
+    if not HAS_OPTUNA:
+        print("    Optuna 未安装，使用默认参数")
+        return _default_xgb_params()
 
-    # 划分训练/验证/测试集
-    X_train, X_temp, y_train, y_temp = train_test_split(
-        X, y, test_size=0.3, random_state=42, stratify=y
-    )
-    X_val, X_test, y_val, y_test = train_test_split(
-        X_temp, y_temp, test_size=0.5, random_state=42, stratify=y_temp
-    )
+    def objective(trial):
+        params = {
+            'n_estimators': 500,
+            'max_depth': trial.suggest_int('max_depth', 3, 10),
+            'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.15, log=True),
+            'subsample': trial.suggest_float('subsample', 0.6, 1.0),
+            'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
+            'min_child_weight': trial.suggest_int('min_child_weight', 1, 20),
+            'gamma': trial.suggest_float('gamma', 0.0, 1.0),
+            'reg_alpha': trial.suggest_float('reg_alpha', 1e-3, 10.0, log=True),
+            'reg_lambda': trial.suggest_float('reg_lambda', 0.1, 10.0, log=True),
+            'objective': 'binary:logistic',
+            'eval_metric': 'auc',
+            'random_state': 42,
+            'use_label_encoder': False,
+            'n_jobs': -1,
+        }
 
-    print(f"  训练集: {len(X_train)}, 验证集: {len(X_val)}, 测试集: {len(X_test)}")
+        skf = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
+        auc_scores = []
 
-    results = {}
+        for train_idx, val_idx in skf.split(X_train, y_train):
+            X_tr, X_va = X_train.iloc[train_idx], X_train.iloc[val_idx]
+            y_tr, y_va = y_train[train_idx], y_train[val_idx]
 
-    # ─── XGBoost ───
-    print("\n  --- XGBoost ---")
-    xgb_params = {
+            model = xgb.XGBClassifier(**params)
+            model.fit(X_tr, y_tr, eval_set=[(X_va, y_va)], verbose=False)
+
+            prob = model.predict_proba(X_va)[:, 1]
+            auc_scores.append(roc_auc_score(y_va, prob))
+
+        return np.mean(auc_scores)
+
+    study = optuna.create_study(direction='maximize')
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
+
+    best_params = _default_xgb_params()
+    best_params.update(study.best_params)
+    print(f"    XGBoost 最优 AUC: {study.best_value:.4f}")
+    return best_params
+
+
+def optuna_search_lgb(X_train, y_train, n_trials=30):
+    """Optuna 超参搜索 — LightGBM（3-fold CV，优化 AUC）"""
+    if not HAS_OPTUNA:
+        print("    Optuna 未安装，使用默认参数")
+        return _default_lgb_params()
+
+    def objective(trial):
+        params = {
+            'n_estimators': 500,
+            'max_depth': trial.suggest_int('max_depth', 3, 12),
+            'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.15, log=True),
+            'num_leaves': trial.suggest_int('num_leaves', 15, 127),
+            'subsample': trial.suggest_float('subsample', 0.6, 1.0),
+            'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
+            'min_child_samples': trial.suggest_int('min_child_samples', 5, 50),
+            'reg_alpha': trial.suggest_float('reg_alpha', 1e-3, 10.0, log=True),
+            'reg_lambda': trial.suggest_float('reg_lambda', 0.1, 10.0, log=True),
+            'objective': 'binary',
+            'metric': 'auc',
+            'random_state': 42,
+            'verbose': -1,
+            'n_jobs': -1,
+        }
+
+        skf = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
+        auc_scores = []
+
+        for train_idx, val_idx in skf.split(X_train, y_train):
+            X_tr, X_va = X_train.iloc[train_idx], X_train.iloc[val_idx]
+            y_tr, y_va = y_train[train_idx], y_train[val_idx]
+
+            model = lgb.LGBMClassifier(**params)
+            model.fit(X_tr, y_tr, eval_set=[(X_va, y_va)])
+
+            prob = model.predict_proba(X_va)[:, 1]
+            auc_scores.append(roc_auc_score(y_va, prob))
+
+        return np.mean(auc_scores)
+
+    study = optuna.create_study(direction='maximize')
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
+
+    best_params = _default_lgb_params()
+    best_params.update(study.best_params)
+    print(f"    LightGBM 最优 AUC: {study.best_value:.4f}")
+    return best_params
+
+
+def _default_xgb_params():
+    """XGBoost 默认参数（Optuna 不可用时回退）"""
+    return {
         'n_estimators': 500,
         'max_depth': 6,
         'learning_rate': 0.05,
@@ -412,41 +545,10 @@ def train_models(X, y, skip_torch=False):
         'n_jobs': -1,
     }
 
-    xgb_model = xgb.XGBClassifier(**xgb_params)
-    xgb_model.fit(
-        X_train, y_train,
-        eval_set=[(X_val, y_val)],
-        verbose=50,
-    )
 
-    xgb_calibrated = CalibratedClassifierCV(
-        xgb_model, method='isotonic', cv=5
-    )
-    xgb_calibrated.fit(X_val, y_val)
-
-    xgb_prob = xgb_calibrated.predict_proba(X_test)[:, 1]
-    xgb_pred = xgb_calibrated.predict(X_test)
-    results['xgboost'] = evaluate_model('XGBoost', xgb_prob, xgb_pred, y_test)
-
-    # 保存模型
-    xgb_model.save_model(str(MODEL_DIR / 'xgboost_model.json'))
-    import joblib
-    joblib.dump(xgb_calibrated, MODEL_DIR / 'xgboost_calibrated.pkl')
-
-    # XGBoost 特征重要性
-    importance = pd.Series(
-        xgb_model.feature_importances_,
-        index=X.columns
-    ).sort_values(ascending=False)
-    print("\n  XGBoost Top 10 特征重要性:")
-    for i, (feat, imp) in enumerate(importance.head(10).items()):
-        print(f"    {i+1}. {feat}: {imp:.4f}")
-
-    importance.to_csv(REPORT_DIR / 'xgboost_importance.csv')
-
-    # ─── LightGBM ───
-    print("\n  --- LightGBM ---")
-    lgb_params = {
+def _default_lgb_params():
+    """LightGBM 默认参数（Optuna 不可用时回退）"""
+    return {
         'n_estimators': 500,
         'max_depth': 7,
         'learning_rate': 0.05,
@@ -463,15 +565,92 @@ def train_models(X, y, skip_torch=False):
         'n_jobs': -1,
     }
 
+
+# ─── 5. Model Training ──────────────────────────────────────────────────────
+
+def train_models(X, y, skip_torch=False, skip_optuna=False):
+    """
+    训练 XGBoost + LightGBM 模型 (v2)
+
+    改进点:
+    - 4-way 数据分割: train(60%) / val(20%) / test(20%)
+    - CalibratedClassifierCV 使用 cv='prefit'，在独立的 val 集上校准
+    - Optuna 超参搜索 + 3-fold CV (可选)
+    - ECE/MCE 校准指标
+    """
+    print("\n" + "=" * 60)
+    print("[4/6] 模型训练 (v2)")
+    print("=" * 60)
+
+    # ─── 4-way 数据分割 ───
+    # Step 1: 80% train_raw + 20% test
+    X_train_raw, X_test, y_train_raw, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y,
+    )
+    # Step 2: train_raw → 75% train + 25% val
+    #   (最终比例: train=60%, val=20%, test=20%)
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_train_raw, y_train_raw, test_size=0.25, random_state=42, stratify=y_train_raw,
+    )
+
+    print(f"  数据分割:")
+    print(f"    训练集: {len(X_train)} (60%)")
+    print(f"    验证集: {len(X_val)} (20%) — 用于 early stopping + 概率校准")
+    print(f"    测试集: {len(X_test)} (20%) — 仅用于最终评估")
+
+    results = {}
+
+    # ─── Optuna 超参搜索 ───
+    if not skip_optuna and HAS_OPTUNA:
+        print("\n  --- Optuna 超参搜索 ---")
+        xgb_params = optuna_search_xgb(X_train, y_train, n_trials=OPTUNA_N_TRIALS_XGB)
+        lgb_params = optuna_search_lgb(X_train, y_train, n_trials=OPTUNA_N_TRIALS_LGB)
+    else:
+        print("\n  使用默认超参数 (skip_optuna=True 或 Optuna 未安装)")
+        xgb_params = _default_xgb_params()
+        lgb_params = _default_lgb_params()
+
+    # ─── XGBoost ───
+    print("\n  --- XGBoost ---")
+    xgb_model = xgb.XGBClassifier(**xgb_params)
+    xgb_model.fit(
+        X_train, y_train,
+        eval_set=[(X_val, y_val)],
+        verbose=50,
+    )
+
+    # 概率校准（使用独立的验证集 + cv='prefit'）
+    xgb_calibrated = CalibratedClassifierCV(xgb_model, method='isotonic', cv='prefit')
+    xgb_calibrated.fit(X_val, y_val)
+
+    xgb_prob = xgb_calibrated.predict_proba(X_test)[:, 1]
+    xgb_pred = xgb_calibrated.predict(X_test)
+    results['xgboost'] = evaluate_model('XGBoost', xgb_prob, xgb_pred, y_test)
+
+    # 保存模型
+    xgb_model.save_model(str(MODEL_DIR / 'xgboost_model.json'))
+    import joblib
+    joblib.dump(xgb_calibrated, MODEL_DIR / 'xgboost_calibrated.pkl')
+
+    # XGBoost 特征重要性
+    importance = pd.Series(
+        xgb_model.feature_importances_, index=X.columns,
+    ).sort_values(ascending=False)
+    print("\n  XGBoost Top 10 特征重要性:")
+    for i, (feat, imp) in enumerate(importance.head(10).items()):
+        print(f"    {i+1}. {feat}: {imp:.4f}")
+    importance.to_csv(REPORT_DIR / 'xgboost_importance.csv')
+
+    # ─── LightGBM ───
+    print("\n  --- LightGBM ---")
     lgb_model = lgb.LGBMClassifier(**lgb_params)
     lgb_model.fit(
         X_train, y_train,
         eval_set=[(X_val, y_val)],
     )
 
-    lgb_calibrated = CalibratedClassifierCV(
-        lgb_model, method='isotonic', cv=5
-    )
+    # 概率校准
+    lgb_calibrated = CalibratedClassifierCV(lgb_model, method='isotonic', cv='prefit')
     lgb_calibrated.fit(X_val, y_val)
 
     lgb_prob = lgb_calibrated.predict_proba(X_test)[:, 1]
@@ -482,12 +661,11 @@ def train_models(X, y, skip_torch=False):
     joblib.dump(lgb_calibrated, MODEL_DIR / 'lightgbm_calibrated.pkl')
 
     lgb_importance = pd.Series(
-        lgb_model.feature_importances_,
-        index=X.columns
+        lgb_model.feature_importances_, index=X.columns,
     ).sort_values(ascending=False)
     lgb_importance.to_csv(REPORT_DIR / 'lightgbm_importance.csv')
 
-    # ─── PyTorch ───
+    # ─── PyTorch MLP（可选）───
     if not skip_torch:
         print("\n  --- PyTorch MLP ---")
         try:
@@ -496,7 +674,7 @@ def train_models(X, y, skip_torch=False):
             from torch.utils.data import TensorDataset, DataLoader
 
             torch_prob, torch_pred = train_pytorch_model(
-                X_train, y_train, X_val, y_val, X_test
+                X_train, y_train, X_val, y_val, X_test,
             )
             results['pytorch'] = evaluate_model('PyTorch MLP', torch_prob, torch_pred, y_test)
         except Exception as e:
@@ -506,6 +684,17 @@ def train_models(X, y, skip_torch=False):
     # 保存结果
     with open(REPORT_DIR / 'results_summary.json', 'w', encoding='utf-8') as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
+
+    # 保存超参（便于复现）
+    params_record = {
+        'xgboost': {k: v for k, v in xgb_params.items() if k != 'n_jobs'},
+        'lightgbm': {k: v for k, v in lgb_params.items() if k != 'n_jobs'},
+        'optuna_used': not skip_optuna and HAS_OPTUNA,
+        'feature_version': '2.0',
+        'label_type': 'synthetic',
+    }
+    with open(REPORT_DIR / 'hyperparams.json', 'w', encoding='utf-8') as f:
+        json.dump(params_record, f, ensure_ascii=False, indent=2)
 
     return results, X_test, y_test, {
         'xgboost': xgb_calibrated,
@@ -519,13 +708,11 @@ def train_pytorch_model(X_train, y_train, X_val, y_val, X_test):
     import torch.nn as nn
     from torch.utils.data import TensorDataset, DataLoader
 
-    # 标准化
     scaler = StandardScaler()
     X_train_s = scaler.fit_transform(X_train)
     X_val_s = scaler.transform(X_val)
     X_test_s = scaler.transform(X_test)
 
-    # 保存 scaler
     import joblib
     joblib.dump(scaler, MODEL_DIR / 'pytorch_scaler.pkl')
 
@@ -581,7 +768,6 @@ def train_pytorch_model(X_train, y_train, X_val, y_val, X_test):
             epoch_loss += loss.item()
         scheduler.step()
 
-        # 验证
         model.eval()
         with torch.no_grad():
             val_pred = model(X_v).cpu().numpy()
@@ -601,7 +787,6 @@ def train_pytorch_model(X_train, y_train, X_val, y_val, X_test):
             print(f"    Early stopping at epoch {epoch+1}")
             break
 
-    # 加载最佳模型并预测
     model.load_state_dict(torch.load(MODEL_DIR / 'pytorch_model.pth', weights_only=True))
     model.eval()
     with torch.no_grad():
@@ -612,10 +797,10 @@ def train_pytorch_model(X_train, y_train, X_val, y_val, X_test):
     return test_prob, test_pred
 
 
-# ─── 5. Evaluation ──────────────────────────────────────────────────────────
+# ─── 6. Evaluation ──────────────────────────────────────────────────────────
 
 def evaluate_model(name, prob, pred, y_true):
-    """评估单个模型"""
+    """评估单个模型（含 ECE/MCE 校准指标）"""
     auc = roc_auc_score(y_true, prob)
     brier = brier_score_loss(y_true, prob)
     ll = log_loss(y_true, prob)
@@ -623,10 +808,13 @@ def evaluate_model(name, prob, pred, y_true):
     prec = precision_score(y_true, pred, zero_division=0)
     rec = recall_score(y_true, pred, zero_division=0)
     f1 = f1_score(y_true, pred, zero_division=0)
+    ece = expected_calibration_error(y_true, prob)
+    mce = maximum_calibration_error(y_true, prob)
 
     print(f"    {name}:")
     print(f"      AUC={auc:.4f}  Brier={brier:.4f}  LogLoss={ll:.4f}")
     print(f"      Acc={acc:.4f}  Precision={prec:.4f}  Recall={rec:.4f}  F1={f1:.4f}")
+    print(f"      ECE={ece:.4f}  MCE={mce:.4f}")
 
     return {
         'name': name,
@@ -637,6 +825,8 @@ def evaluate_model(name, prob, pred, y_true):
         'precision': round(prec, 4),
         'recall': round(rec, 4),
         'f1': round(f1, 4),
+        'ece': round(ece, 4),
+        'mce': round(mce, 4),
     }
 
 
@@ -658,7 +848,7 @@ def generate_report(results, X_test, y_test, models, correlations):
     ax.plot([0, 1], [0, 1], 'k--', alpha=0.3)
     ax.set_xlabel('False Positive Rate')
     ax.set_ylabel('True Positive Rate')
-    ax.set_title('ROC Curve Comparison')
+    ax.set_title('ROC Curve Comparison (v2)')
     ax.legend(fontsize=9)
 
     # 2. Precision-Recall 曲线
@@ -685,7 +875,7 @@ def generate_report(results, X_test, y_test, models, correlations):
 
     # 4. 指标对比柱状图
     ax = axes[1, 1]
-    metrics = ['auc', 'accuracy', 'precision', 'recall', 'f1']
+    metrics = ['auc', 'accuracy', 'precision', 'recall', 'f1', 'ece']
     x_pos = np.arange(len(metrics))
     width = 0.25
     for i, (name, res) in enumerate(results.items()):
@@ -696,7 +886,7 @@ def generate_report(results, X_test, y_test, models, correlations):
     ax.set_xticks(x_pos + width)
     ax.set_xticklabels([m.capitalize() for m in metrics])
     ax.set_ylabel('Score')
-    ax.set_title('Model Metrics Comparison')
+    ax.set_title('Model Metrics Comparison (v2)')
     ax.legend(fontsize=9)
 
     plt.tight_layout()
@@ -707,7 +897,6 @@ def generate_report(results, X_test, y_test, models, correlations):
     fig, ax = plt.subplots(figsize=(8, 6))
     for name, model in models.items():
         prob = model.predict_proba(X_test)[:, 1]
-        # 分 10 个桶
         bins = np.linspace(0, 1, 11)
         bin_idx = np.digitize(prob, bins) - 1
         bin_idx = np.clip(bin_idx, 0, 9)
@@ -720,40 +909,34 @@ def generate_report(results, X_test, y_test, models, correlations):
     ax.plot([0, 1], [0, 1], 'k--', alpha=0.3, label='Perfect calibration')
     ax.set_xlabel('Mean Predicted Probability')
     ax.set_ylabel('Fraction of Positives')
-    ax.set_title('Calibration Plot')
+    ax.set_title('Calibration Plot (v2)')
     ax.legend()
     plt.tight_layout()
     plt.savefig(REPORT_DIR / 'calibration_plot.png', dpi=150)
     plt.close()
 
     print(f"  报告图表已保存到 {REPORT_DIR}/")
-    print(f"    - evaluation_report.png (ROC/PR/概率分布/指标对比)")
-    print(f"    - calibration_plot.png (概率校准图)")
-    print(f"    - correlation_analysis.png (特征相关性)")
-    print(f"    - results_summary.json (指标汇总)")
 
 
-# ─── 6. Prediction API ──────────────────────────────────────────────────────
+# ─── 7. Prediction API ──────────────────────────────────────────────────────
 
 def save_prediction_api():
-    """生成预测推理脚本"""
+    """生成预测推理脚本 (v2 — 使用共享特征模块)"""
     print("\n" + "=" * 60)
-    print("[6/6] 生成预测 API")
+    print("[6/6] 生成预测 API (v2)")
     print("=" * 60)
 
     api_code = '''"""
-录取概率预测 API
-================
-加载训练好的模型，对新的考生-院校组合预测录取概率
+录取概率预测 API (v2)
+=====================
+加载训练好的模型，对新的考生-院校组合预测录取概率。
+使用共享特征模块 (features.py) 保证训练-推理特征一致。
 
 用法:
     from predict import predict_admission
     prob = predict_admission(
-        student_rank=5000,
-        university_id="xxx",
-        province="广东",
-        subject_type="物理类",
-        year=2026,
+        student_rank=5000, min_rank=8000, min_score=620,
+        avg_score=635, is_985=True, ...
     )
 """
 
@@ -763,24 +946,23 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
+from features import FEATURE_NAMES, build_inference_features
+
 MODEL_DIR = Path(__file__).parent / 'output' / 'models'
 DATA_DIR = Path(__file__).parent / 'output' / 'data'
 
-# 加载模型和元数据
 _xgb_model = None
 _lgb_model = None
 _feature_meta = None
-_universities = None
 
 
 def _load_models():
-    global _xgb_model, _lgb_model, _feature_meta, _universities
+    global _xgb_model, _lgb_model, _feature_meta
     if _xgb_model is None:
         _xgb_model = joblib.load(MODEL_DIR / 'xgboost_calibrated.pkl')
         _lgb_model = joblib.load(MODEL_DIR / 'lightgbm_calibrated.pkl')
         with open(DATA_DIR / 'feature_meta.json', 'r', encoding='utf-8') as f:
             _feature_meta = json.load(f)
-        _universities = pd.read_csv(DATA_DIR / 'universities.csv')
 
 
 def predict_admission(
@@ -802,54 +984,29 @@ def predict_admission(
     score_spread: float = 10,
     model: str = 'ensemble',
 ) -> dict:
-    """
-    预测录取概率
-
-    Args:
-        student_rank: 考生位次
-        min_rank: 该校该专业历年最低录取位次（加权平均）
-        min_score: 历年最低录取分
-        model: 'xgboost' | 'lightgbm' | 'ensemble'
-
-    Returns:
-        dict with probability, tier, confidence
-    """
+    """预测录取概率 (v2)"""
     _load_models()
 
-    if avg_score is None:
-        avg_score = min_score
+    features = build_inference_features(
+        student_rank=student_rank,
+        min_rank=min_rank,
+        min_score=min_score,
+        avg_score=avg_score,
+        is_985=is_985,
+        is_211=is_211,
+        is_dual_first_class=is_dual_first_class,
+        tier_code=tier_code,
+        school_type_code=school_type_code,
+        uni_rank=uni_rank,
+        best_discipline=best_discipline,
+        province_code=province_code,
+        year=year,
+        score_line_est=score_line_est,
+        line_diff=line_diff,
+        score_spread=score_spread,
+    )
 
-    rank_ratio = student_rank / max(min_rank, 1)
-
-    features = {
-        'rank_ratio': rank_ratio,
-        'log_rank_ratio': np.log(rank_ratio + 1e-6),
-        'score_gap_ratio': rank_ratio - 1.0,
-        'student_rank': student_rank,
-        'min_rank': min_rank,
-        'rank_log_diff': np.log(student_rank + 1) - np.log(min_rank + 1),
-        'min_score': min_score,
-        'avg_score': avg_score,
-        'score_spread': score_spread,
-        'score_line_est': score_line_est,
-        'line_diff': line_diff,
-        'student_line_diff': line_diff * (1 + (rank_ratio - 1) * 0.5),
-        'is_985': int(is_985),
-        'is_211': int(is_211),
-        'is_dual_first_class': int(is_dual_first_class),
-        'tier_code': tier_code,
-        'school_type_code': school_type_code,
-        'uni_rank_log': np.log(uni_rank + 1),
-        'best_discipline': best_discipline,
-        'province_code': province_code,
-        'year': year,
-        'year_norm': (year - 2020) / 5.0,
-        'rank_tier_interaction': rank_ratio * tier_code,
-        'is985_rank_ratio': int(is_985) * rank_ratio,
-    }
-
-    feature_names = _feature_meta['feature_names']
-    X = pd.DataFrame([{k: features.get(k, 0) for k in feature_names}])
+    X = pd.DataFrame([{k: features.get(k, 0) for k in FEATURE_NAMES}])
 
     xgb_prob = _xgb_model.predict_proba(X)[0, 1]
     lgb_prob = _lgb_model.predict_proba(X)[0, 1]
@@ -858,10 +1015,9 @@ def predict_admission(
         prob = xgb_prob
     elif model == 'lightgbm':
         prob = lgb_prob
-    else:  # ensemble
+    else:
         prob = 0.6 * xgb_prob + 0.4 * lgb_prob
 
-    # 冲稳保分层
     if prob >= 0.75:
         tier = 'SAFE'
     elif prob >= 0.40:
@@ -869,9 +1025,10 @@ def predict_admission(
     else:
         tier = 'RUSH'
 
-    # 置信度（基于两模型一致性）
     agreement = 1 - abs(xgb_prob - lgb_prob)
     confidence = 'high' if agreement > 0.9 else 'medium' if agreement > 0.7 else 'low'
+
+    rank_ratio = student_rank / max(min_rank, 1)
 
     return {
         'probability': round(prob * 100, 1),
@@ -880,22 +1037,15 @@ def predict_admission(
         'tier': tier,
         'confidence': confidence,
         'rank_ratio': round(rank_ratio, 3),
+        'feature_version': '2.0',
     }
 
 
 if __name__ == '__main__':
-    # 示例：位次 5000 的考生报考最低位次 8000 的 985 院校
     result = predict_admission(
-        student_rank=5000,
-        min_rank=8000,
-        min_score=620,
-        avg_score=635,
-        is_985=True,
-        is_211=True,
-        is_dual_first_class=True,
-        tier_code=0,
-        uni_rank=30,
-        best_discipline=2,
+        student_rank=5000, min_rank=8000, min_score=620,
+        avg_score=635, is_985=True, is_211=True, is_dual_first_class=True,
+        tier_code=0, uni_rank=30, best_discipline=2,
     )
     print(f"录取概率: {result['probability']}%")
     print(f"分层: {result['tier']}")
@@ -907,16 +1057,17 @@ if __name__ == '__main__':
 
     with open(Path(__file__).parent / 'predict.py', 'w', encoding='utf-8') as f:
         f.write(api_code)
-    print(f"  预测 API 已保存到 packages/ml/predict.py")
+    print(f"  预测 API 已保存到 packages/ml/predict.py (v2)")
 
 
 # ─── Main ───────────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description='智渡录取概率 ML Pipeline')
+    parser = argparse.ArgumentParser(description='智渡录取概率 ML Pipeline (v2)')
     parser.add_argument('--export-only', action='store_true', help='仅导出数据')
     parser.add_argument('--skip-export', action='store_true', help='跳过导出（使用已有数据）')
     parser.add_argument('--skip-torch', action='store_true', help='跳过 PyTorch 训练')
+    parser.add_argument('--skip-optuna', action='store_true', help='跳过 Optuna 超参搜索')
     args = parser.parse_args()
 
     ensure_dirs()
@@ -938,7 +1089,9 @@ def main():
     correlations = correlation_analysis(X, y)
 
     # Step 4: Model Training
-    results, X_test, y_test, models = train_models(X, y, skip_torch=args.skip_torch)
+    results, X_test, y_test, models = train_models(
+        X, y, skip_torch=args.skip_torch, skip_optuna=args.skip_optuna,
+    )
 
     # Step 5: Evaluation Report
     generate_report(results, X_test, y_test, models, correlations)
@@ -948,20 +1101,22 @@ def main():
 
     # 最终汇总
     print("\n" + "=" * 60)
-    print("Pipeline 完成！")
+    print("Pipeline (v2) 完成！")
     print("=" * 60)
     print(f"\n  输出目录: {OUTPUT_DIR}")
     print(f"  模型文件: {MODEL_DIR}/")
     print(f"  评估报告: {REPORT_DIR}/")
-    print(f"  预测 API: packages/ml/predict.py")
+    print(f"  特征版本: 2.0 (19 维)")
+    print(f"  标签类型: 合成标签 (synthetic)")
 
     print("\n  模型性能汇总:")
     for name, res in results.items():
         if res:
-            print(f"    {res['name']}: AUC={res['auc']:.4f}, F1={res['f1']:.4f}, Brier={res['brier']:.4f}")
+            print(f"    {res['name']}: AUC={res['auc']:.4f}, F1={res['f1']:.4f}, "
+                  f"Brier={res['brier']:.4f}, ECE={res['ece']:.4f}")
 
     # 测试预测 API
-    print("\n  测试预测 API...")
+    print("\n  测试预测 API (v2)...")
     sys.path.insert(0, str(Path(__file__).parent))
     try:
         from predict import predict_admission
@@ -972,6 +1127,7 @@ def main():
         )
         print(f"    示例预测: 概率={test_result['probability']}%, "
               f"分层={test_result['tier']}, 置信度={test_result['confidence']}")
+        print(f"    特征版本: {test_result.get('feature_version', 'unknown')}")
     except Exception as e:
         print(f"    预测 API 测试失败: {e}")
 

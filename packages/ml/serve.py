@@ -28,6 +28,8 @@ import pandas as pd
 from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 
+from features import FEATURE_NAMES, build_inference_features
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -103,18 +105,20 @@ def load_models():
     _xgb_model = joblib.load(MODEL_DIR / 'xgboost_calibrated.pkl')
     _lgb_model = joblib.load(MODEL_DIR / 'lightgbm_calibrated.pkl')
 
-    with open(DATA_DIR / 'feature_meta.json', 'r', encoding='utf-8') as f:
-        _feature_meta = json.load(f)
+    try:
+        with open(DATA_DIR / 'feature_meta.json', 'r', encoding='utf-8') as f:
+            _feature_meta = json.load(f)
+    except Exception:
+        _feature_meta = {'version': 'unknown'}
 
-    logger.info(f"Models loaded. Features: {len(_feature_meta['feature_names'])}")
+    logger.info(f"Models loaded. Features: {len(FEATURE_NAMES)} (shared module)")
 
 
 def predict(features: dict, model: str = 'ensemble') -> dict:
-    """核心推理函数"""
+    """核心推理函数 (v2 — 使用共享特征模块)"""
     load_models()
 
-    feature_names = _feature_meta['feature_names']
-    X = pd.DataFrame([{k: features.get(k, 0) for k in feature_names}])
+    X = pd.DataFrame([{k: features.get(k, 0) for k in FEATURE_NAMES}])
 
     xgb_prob = float(_xgb_model.predict_proba(X)[0, 1])
     lgb_prob = float(_lgb_model.predict_proba(X)[0, 1])
@@ -144,6 +148,7 @@ def predict(features: dict, model: str = 'ensemble') -> dict:
         'lightgbm_prob': round(lgb_prob * 100, 1),
         'tier': tier,
         'confidence': confidence,
+        'feature_version': (_feature_meta or {}).get('version', 'unknown'),
     }
 
 
@@ -165,38 +170,30 @@ def build_features(
     line_diff: float = 50,
     score_spread: float = 10,
 ) -> dict:
-    """从业务参数构建特征向量"""
-    if avg_score is None:
-        avg_score = min_score
+    """
+    从业务参数构建特征向量 (v2)
 
-    rank_ratio = student_rank / max(min_rank, 1)
-
-    return {
-        'rank_ratio': rank_ratio,
-        'log_rank_ratio': np.log(rank_ratio + 1e-6),
-        'score_gap_ratio': rank_ratio - 1.0,
-        'student_rank': student_rank,
-        'min_rank': min_rank,
-        'rank_log_diff': np.log(student_rank + 1) - np.log(min_rank + 1),
-        'min_score': min_score,
-        'avg_score': avg_score,
-        'score_spread': score_spread,
-        'score_line_est': score_line_est,
-        'line_diff': line_diff,
-        'student_line_diff': line_diff * (1 + (rank_ratio - 1) * 0.5),
-        'is_985': int(is_985),
-        'is_211': int(is_211),
-        'is_dual_first_class': int(is_dual_first_class),
-        'tier_code': tier_code,
-        'school_type_code': school_type_code,
-        'uni_rank_log': np.log(uni_rank + 1),
-        'best_discipline': best_discipline,
-        'province_code': province_code,
-        'year': year,
-        'year_norm': (year - 2020) / 5.0,
-        'rank_tier_interaction': rank_ratio * tier_code,
-        'is985_rank_ratio': int(is_985) * rank_ratio,
-    }
+    委托给共享特征模块 features.build_inference_features()，
+    保证训练-推理特征严格一致。
+    """
+    return build_inference_features(
+        student_rank=student_rank,
+        min_rank=min_rank,
+        min_score=min_score,
+        avg_score=avg_score,
+        is_985=is_985,
+        is_211=is_211,
+        is_dual_first_class=is_dual_first_class,
+        tier_code=tier_code,
+        school_type_code=school_type_code,
+        uni_rank=uni_rank,
+        best_discipline=best_discipline,
+        province_code=province_code,
+        year=year,
+        score_line_est=score_line_est,
+        line_diff=line_diff,
+        score_spread=score_spread,
+    )
 
 
 # ─── 输入验证 ──────────────────────────────────────────────────────────────
@@ -249,6 +246,8 @@ def health():
         'status': 'ok',
         'model': 'admission-predictor',
         'models_loaded': models_loaded,
+        'feature_version': (_feature_meta or {}).get('version', 'unknown'),
+        'feature_count': len(FEATURE_NAMES),
     })
 
 

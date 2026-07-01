@@ -43,6 +43,8 @@ export interface MLPredictResult {
   confidence: 'high' | 'medium' | 'low';
   /** 是否使用了 ML 模型（false 表示回退到规则引擎） */
   mlUsed: boolean;
+  /** 特征工程版本 */
+  featureVersion?: string;
 }
 
 /**
@@ -96,6 +98,7 @@ export async function predictAdmission(
       tier: result.tier,
       confidence: result.confidence,
       mlUsed: true,
+      featureVersion: result.feature_version,
     };
   } catch (err) {
     console.warn('[ML] Prediction failed, falling back to rule engine:', err);
@@ -155,6 +158,7 @@ export async function predictBatch(
       tier: r.tier,
       confidence: r.confidence,
       mlUsed: true,
+      featureVersion: r.feature_version,
     }));
   } catch (err) {
     console.warn('[ML] Batch prediction failed, falling back:', err);
