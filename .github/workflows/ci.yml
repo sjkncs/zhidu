@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+  PNPM_VERSION: '9'
+
+jobs:
+  # ─── Lint + Typecheck ───────────────────────────────────────────────────────
+  lint:
+    name: Lint & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm turbo run typecheck --continue
+
+      - name: Lint
+        run: pnpm turbo run lint --continue
+
+  # ─── Unit Tests ─────────────────────────────────────────────────────────────
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run Vitest
+        run: pnpm test
+
+  # ─── Build ──────────────────────────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build Web
+        run: pnpm turbo run build --filter=@zhidu/web
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+  # ─── ML Service Build (Docker) ─────────────────────────────────────────────
+  ml-docker:
+    name: ML Docker Image
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check ML models exist
+        id: check-models
+        run: |
+          if [ -f "packages/ml/output/models/xgboost_calibrated.pkl" ]; then
+            echo "models_exist=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "models_exist=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::ML models not found, skipping Docker build"
+          fi
+
+      - name: Build Docker image
+        if: steps.check-models.outputs.models_exist == 'true'
+        run: |
+          docker build \
+            -t zhidu-ml-predictor:${{ github.sha }} \
+            -t zhidu-ml-predictor:latest \
+            packages/ml/
+
+      - name: Smoke test
+        if: steps.check-models.outputs.models_exist == 'true'
+        run: |
+          docker run -d --name ml-test -p 5100:5100 \
+            -e ML_API_KEY=test-key \
+            zhidu-ml-predictor:latest
+          sleep 10
+          curl -sf http://localhost:5100/health || exit 1
+          docker stop ml-test && docker rm ml-test
