@@ -4,7 +4,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { updateSkillNode, deleteSkillNode } from '@zhidu/db/repository';
 
 export async function PATCH(
   request: NextRequest,
@@ -22,21 +21,50 @@ export async function PATCH(
       return NextResponse.json({ error: '未登录' }, { status: 401 });
     }
 
-    const node = await updateSkillNode(id, {
-      title,
-      description,
-      progress,
-      difficulty,
-      prerequisites,
-      resources,
-      estimatedHours,
-    });
+    // 验证节点归属当前用户
+    const { data: node } = await supabase
+      .from('skill_nodes')
+      .select('id, skill_tree_id')
+      .eq('id', id)
+      .single();
 
     if (!node) {
+      return NextResponse.json({ error: '节点不存在' }, { status: 404 });
+    }
+
+    const { data: tree } = await supabase
+      .from('skill_trees')
+      .select('id')
+      .eq('id', node.skill_tree_id)
+      .eq('user_id', user.id)
+      .single();
+
+    if (!tree) {
+      return NextResponse.json({ error: '无权操作' }, { status: 403 });
+    }
+
+    const updates: Record<string, unknown> = {};
+    if (title !== undefined) updates.title = title;
+    if (description !== undefined) updates.description = description;
+    if (progress !== undefined) updates.progress = progress;
+    if (difficulty !== undefined) updates.difficulty = difficulty;
+    if (prerequisites !== undefined) updates.prerequisites = prerequisites;
+    if (resources !== undefined) updates.resources = resources;
+    if (estimatedHours !== undefined) updates.estimated_hours = estimatedHours;
+
+    const { data: updated, error } = await supabase
+      .from('skill_nodes')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error || !updated) {
+      console.error('[skills/nodes/[id] PATCH]', error?.message);
       return NextResponse.json({ error: '更新失败' }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, data: node });
+    return NextResponse.json({ success: true, data: updated });
   } catch (err) {
     console.error('[skills/nodes/[id] PATCH]', err);
     return NextResponse.json({ error: '更新失败' }, { status: 500 });
@@ -57,9 +85,35 @@ export async function DELETE(
       return NextResponse.json({ error: '未登录' }, { status: 401 });
     }
 
-    const ok = await deleteSkillNode(id);
+    // 验证节点归属当前用户
+    const { data: node } = await supabase
+      .from('skill_nodes')
+      .select('id, skill_tree_id')
+      .eq('id', id)
+      .single();
 
-    if (!ok) {
+    if (!node) {
+      return NextResponse.json({ error: '节点不存在' }, { status: 404 });
+    }
+
+    const { data: tree } = await supabase
+      .from('skill_trees')
+      .select('id')
+      .eq('id', node.skill_tree_id)
+      .eq('user_id', user.id)
+      .single();
+
+    if (!tree) {
+      return NextResponse.json({ error: '无权操作' }, { status: 403 });
+    }
+
+    const { error } = await supabase
+      .from('skill_nodes')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('[skills/nodes/[id] DELETE]', error.message);
       return NextResponse.json({ error: '删除失败' }, { status: 500 });
     }
 

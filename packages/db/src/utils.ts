@@ -8,10 +8,21 @@ import { createClient, type SupabaseClient, type Database } from './index';
 // Lazy-initialized client to avoid circular dependency at module load time.
 let _db: SupabaseClient<Database> | null = null;
 
-/** Get the shared Supabase client instance */
+/**
+ * Get the shared Supabase client instance.
+ *
+ * 使用 service role key 绕过 RLS（API 路由已在上层验证 auth 并传入 userId）。
+ * 如果 service role key 未配置，回退到 anon key。
+ */
 export function getDb(): SupabaseClient<Database> {
   if (!_db) {
-    _db = createClient();
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (serviceRoleKey) {
+      const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+      _db = createClient({ url, anonKey: serviceRoleKey });
+    } else {
+      _db = createClient();
+    }
   }
   return _db;
 }

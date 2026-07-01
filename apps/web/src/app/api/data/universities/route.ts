@@ -33,13 +33,20 @@ export async function GET(request: NextRequest) {
       query = query.eq('province', province);
     }
     if (tier) {
-      query = query.eq('tier', tier);
+      // 双一流是 985/211 的超集：点击"双一流"应显示所有 985+211+双一流院校
+      if (tier === '双一流') {
+        query = query.in('tier', ['985', '211', '双一流']);
+      } else {
+        query = query.eq('tier', tier);
+      }
     }
-    if (is985 !== null && is985 !== undefined && is985 !== '') {
-      query = query.eq('is_985', is985 === 'true');
+    // 985/211 兼容筛选：同时匹配布尔列和 tier 文本列
+    // 当 is_985/is_211 布尔列未被 migration 回填时，回退到 tier 列
+    if (is985 === 'true') {
+      query = query.or('is_985.eq.true,tier.eq.985');
     }
-    if (is211 !== null && is211 !== undefined && is211 !== '') {
-      query = query.eq('is_211', is211 === 'true');
+    if (is211 === 'true') {
+      query = query.or('is_211.eq.true,tier.in.(985,211)');
     }
     if (schoolType) {
       query = query.eq('school_type', schoolType);

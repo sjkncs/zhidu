@@ -99,6 +99,7 @@ export default function UniversitiesPage() {
   const [total, setTotal] = useState(0);
   const [universities, setUniversities] = useState<University[]>([]);
   const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailData, setDetailData] = useState<{
     university: University;
@@ -123,6 +124,7 @@ export default function UniversitiesPage() {
   // 查询院校列表
   const fetchUniversities = useCallback(async () => {
     setLoading(true);
+    setFetchError(null);
     try {
       const params = new URLSearchParams();
       if (debouncedQuery) params.set('name', debouncedQuery);
@@ -139,9 +141,12 @@ export default function UniversitiesPage() {
       if (json.success) {
         setUniversities(json.data.universities);
         setTotal(json.data.total);
+      } else {
+        setFetchError(json.error ?? '查询失败');
       }
     } catch (err) {
       console.error('Failed to fetch universities:', err);
+      setFetchError('网络请求失败');
     } finally {
       setLoading(false);
     }
@@ -308,6 +313,12 @@ export default function UniversitiesPage() {
         </div>
       </div>
 
+      {fetchError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/20 dark:bg-red-500/5 dark:text-red-400">
+          {fetchError}
+        </div>
+      )}
+
       {/* 结果列表 */}
       <div className="space-y-2">
         {loading ? (
@@ -396,9 +407,9 @@ function UniversityRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="truncate font-medium text-text-primary">{uni.name}</span>
-            {uni.is_985 && <Badge color="red">985</Badge>}
-            {uni.is_211 && !uni.is_985 && <Badge color="yellow">211</Badge>}
-            {uni.is_dual_first_class && !uni.is_211 && <Badge color="blue">双一流</Badge>}
+            {(uni.is_985 || uni.tier === '985') && <Badge color="red">985</Badge>}
+            {(uni.is_211 || uni.tier === '211') && !(uni.is_985 || uni.tier === '985') && <Badge color="yellow">211</Badge>}
+            {(uni.is_dual_first_class || uni.tier === '双一流') && !(uni.is_211 || uni.tier === '211') && !(uni.is_985 || uni.tier === '985') && <Badge color="blue">双一流</Badge>}
           </div>
           <div className="mt-1 flex items-center gap-3 text-xs text-text-secondary">
             <span className="flex items-center gap-1">

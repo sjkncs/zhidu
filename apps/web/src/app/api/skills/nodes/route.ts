@@ -3,7 +3,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { createSkillNode } from '@zhidu/db/repository';
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,19 +30,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '未登录' }, { status: 401 });
     }
 
-    const node = await createSkillNode({
-      skillTreeId,
-      title,
-      description,
-      parentNodeId,
-      difficulty,
-      prerequisites,
-      resources,
-      estimatedHours,
-      sortOrder,
-    });
+    // 使用认证客户端写入（RLS 需要 auth.uid()）
+    const { data: node, error } = await supabase
+      .from('skill_nodes')
+      .insert({
+        skill_tree_id: skillTreeId,
+        title,
+        description: description ?? null,
+        parent_node_id: parentNodeId ?? null,
+        difficulty: difficulty ?? 3,
+        prerequisites: prerequisites ?? [],
+        resources: resources ?? [],
+        estimated_hours: estimatedHours ?? null,
+        sort_order: sortOrder ?? 0,
+      })
+      .select()
+      .single();
 
-    if (!node) {
+    if (error || !node) {
+      console.error('[skills/nodes POST]', error?.message);
       return NextResponse.json({ error: '创建失败' }, { status: 500 });
     }
 

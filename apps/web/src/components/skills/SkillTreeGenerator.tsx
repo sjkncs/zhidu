@@ -72,7 +72,7 @@ function countAllNodes(nodes: SkillTemplateNode[]): number {
 
 function flattenNodes(
   nodes: SkillTemplateNode[],
-  parentId: string | null = null,
+  parentTitle: string | null = null,
   depth: number = 0,
 ): Array<{
   title: string;
@@ -81,7 +81,7 @@ function flattenNodes(
   estimatedHours: number;
   prerequisites: string[];
   resources: any[];
-  parentNodeId: string | null;
+  parentTitle: string | null;
   depth: number;
   sortOrder: number;
 }> {
@@ -92,7 +92,7 @@ function flattenNodes(
     estimatedHours: number;
     prerequisites: string[];
     resources: any[];
-    parentNodeId: string | null;
+    parentTitle: string | null;
     depth: number;
     sortOrder: number;
   }> = [];
@@ -105,11 +105,11 @@ function flattenNodes(
       estimatedHours: node.estimatedHours,
       prerequisites: node.prerequisites,
       resources: node.resources,
-      parentNodeId: parentId,
+      parentTitle,
       depth,
       sortOrder: idx,
     });
-    result.push(...flattenNodes(node.children, null, depth + 1));
+    result.push(...flattenNodes(node.children, node.title, depth + 1));
   });
   return result;
 }
@@ -215,7 +215,7 @@ export default function SkillTreeGenerator({ onTreeCreated }: SkillTreeGenerator
       const treeData = await treeRes.json();
       const treeId: string = treeData.data?.id ?? treeData.id;
 
-      // Step 2: Batch create nodes
+      // Step 2: Batch create nodes (parentTitle 由服务端两趟插入映射为 parent_node_id)
       const flatNodes = flattenNodes(template.nodes);
       const batchNodes = flatNodes.map((n) => ({
         skillTreeId: treeId,
@@ -225,8 +225,7 @@ export default function SkillTreeGenerator({ onTreeCreated }: SkillTreeGenerator
         estimatedHours: n.estimatedHours,
         prerequisites: n.prerequisites,
         resources: n.resources,
-        parentNodeId: n.parentNodeId,
-        depth: n.depth,
+        parentTitle: n.parentTitle,
         sortOrder: n.sortOrder,
       }));
 

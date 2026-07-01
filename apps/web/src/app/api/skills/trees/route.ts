@@ -4,7 +4,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getUserSkillTrees, createSkillTree } from '@zhidu/db/repository';
 
 export async function GET() {
   try {
@@ -15,12 +14,22 @@ export async function GET() {
       return NextResponse.json({ error: '未登录' }, { status: 401 });
     }
 
-    const trees = await getUserSkillTrees(user.id);
+    // 使用认证客户端查询（RLS 需要 auth.uid()）
+    const { data: trees, error } = await supabase
+      .from('skill_trees')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('[skills/trees GET]', error.message);
+      return NextResponse.json({ error: '查询失败' }, { status: 500 });
+    }
 
     return NextResponse.json({
       success: true,
-      data: trees,
-      count: trees.length,
+      data: trees ?? [],
+      count: (trees ?? []).length,
     });
   } catch (err) {
     console.error('[skills/trees GET]', err);
@@ -47,17 +56,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '未登录' }, { status: 401 });
     }
 
-    const tree = await createSkillTree({
-      userId: user.id,
-      name,
-      description,
-      category,
-      sourceMajor,
-      sourceCareer,
-      aiGenerated,
-    });
+    // 使用认证客户端写入（RLS 需要 auth.uid()）
+    const { data: tree, error } = await supabase
+      .from('skill_trees')
+      .insert({
+        user_id: user.id,
+        name,
+        description: description ?? null,
+        category: category ?? 'CUSTOM',
+        source_major: sourceMajor ?? null,
+        source_career: sourceCareer ?? null,
+        ai_generated: aiGenerated ?? false,
+      })
+      .select()
+      .single();
 
-    if (!tree) {
+    if (error || !tree) {
+      console.error('[skills/trees POST]', error?.message);
       return NextResponse.json({ error: '创建失败' }, { status: 500 });
     }
 
