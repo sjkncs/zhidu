@@ -185,8 +185,9 @@ export async function isMLServiceAvailable(): Promise<boolean> {
 
 /**
  * 规则引擎回退（原始位次法 + 线差法简化版）
+ * @internal — exported for unit testing
  */
-function fallbackPredict(input: MLPredictInput): MLPredictResult {
+export function fallbackPredict(input: MLPredictInput): MLPredictResult {
   const rankRatio = input.studentRank / Math.max(input.minRank, 1);
 
   let probability: number;
