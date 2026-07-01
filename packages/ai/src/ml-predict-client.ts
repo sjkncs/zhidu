@@ -6,7 +6,15 @@
  */
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:5100';
+const ML_API_KEY = process.env.ML_API_KEY || '';
 const ML_TIMEOUT_MS = 5000;
+
+/** 构建带 API Key 的请求头 */
+function mlHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (ML_API_KEY) headers['X-API-Key'] = ML_API_KEY;
+  return headers;
+}
 
 export interface MLPredictInput {
   studentRank: number;
@@ -49,7 +57,7 @@ export async function predictAdmission(
 
     const response = await fetch(`${ML_SERVICE_URL}/predict`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mlHeaders(),
       body: JSON.stringify({
         student_rank: input.studentRank,
         min_rank: input.minRank,
@@ -79,13 +87,14 @@ export async function predictAdmission(
     }
 
     const data = await response.json();
+    const result = data.data ?? data;
 
     return {
-      probability: data.probability,
-      xgboostProb: data.xgboost_prob,
-      lightgbmProb: data.lightgbm_prob,
-      tier: data.tier,
-      confidence: data.confidence,
+      probability: result.probability,
+      xgboostProb: result.xgboost_prob,
+      lightgbmProb: result.lightgbm_prob,
+      tier: result.tier,
+      confidence: result.confidence,
       mlUsed: true,
     };
   } catch (err) {
@@ -106,7 +115,7 @@ export async function predictBatch(
 
     const response = await fetch(`${ML_SERVICE_URL}/predict/batch`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mlHeaders(),
       body: JSON.stringify({
         items: inputs.map((input) => ({
           student_rank: input.studentRank,
@@ -137,8 +146,9 @@ export async function predictBatch(
     }
 
     const data = await response.json();
+    const results = data.results ?? [];
 
-    return data.results.map((r: any) => ({
+    return results.map((r: any) => ({
       probability: r.probability,
       xgboostProb: r.xgboost_prob,
       lightgbmProb: r.lightgbm_prob,

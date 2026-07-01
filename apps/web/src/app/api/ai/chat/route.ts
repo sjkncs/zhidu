@@ -11,9 +11,24 @@ import { createLLMService } from '@zhidu/ai/llm-service';
 import { StructuredQueryAgent } from '@zhidu/ai/structured-query-agent';
 import { SupabaseQueryExecutor } from '@zhidu/ai/supabase-query-executor';
 import { createChatSession, batchCreateChatMessages } from '@zhidu/db/repository';
+import { requireUser, authErrorResponse } from '@/lib/auth-utils';
+import { checkRateLimit, getRateLimitKey, rateLimitResponse, AI_CHAT_LIMIT } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
   try {
+    // 速率限制（每用户每分钟 10 次）
+    const rlKey = getRateLimitKey(request);
+    const rl = checkRateLimit(`chat:${rlKey}`, AI_CHAT_LIMIT);
+    if (!rl.allowed) return rateLimitResponse(rl);
+
+    // 要求登录
+    let auth;
+    try {
+      auth = await requireUser();
+    } catch (err) {
+      return authErrorResponse(err);
+    }
+
     const body = await request.json();
     const {
       query,
@@ -31,13 +46,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 限制 query 长度（最大 2000 字符）
+    if (query.length > 2000) {
+      return NextResponse.json(
+        { error: '问题过长，最多 2000 个字符' },
+        { status: 400 },
+      );
+    }
+
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
 
     // ─── Session management ───
     let sessionId = inputSessionId;
-    if (!sessionId && user) {
-      const session = await createChatSession(user.id);
+    if (!sessionId) {
+      const session = await createChatSession(auth.user.id);
       if (session) sessionId = session.id;
     }
 

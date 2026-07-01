@@ -2,17 +2,35 @@
 // POST /api/knowledge/ingest
 // Body: { title, collection, content, sourceUrl?, metadata?, chunkSize?, overlap? }
 //
-// 支持单文档和批量入库
+// 支持单文档和批量入库（单次最多 20 篇）
 // collection: 'policy' | 'major_intro' | 'career' | 'volunteer' | 'general'
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { chunkText } from '@zhidu/ai/chunker';
+import { requireUser, authErrorResponse } from '@/lib/auth-utils';
+import { checkRateLimit, getRateLimitKey, rateLimitResponse, KNOWLEDGE_WRITE_LIMIT } from '@/lib/rate-limit';
 
 const VALID_COLLECTIONS = ['policy', 'major_intro', 'career', 'volunteer', 'general'];
 
+/** 单次请求最大文档数 */
+const MAX_BATCH_DOCS = 20;
+
 export async function POST(request: NextRequest) {
   try {
+    // 速率限制
+    const rlKey = getRateLimitKey(request);
+    const rl = checkRateLimit(`ingest:${rlKey}`, KNOWLEDGE_WRITE_LIMIT);
+    if (!rl.allowed) return rateLimitResponse(rl);
+
+    // 要求登录
+    let auth;
+    try {
+      auth = await requireUser();
+    } catch (err) {
+      return authErrorResponse(err);
+    }
+
     const body = await request.json();
     const {
       title,
@@ -27,17 +45,8 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient();
 
-    // 检查用户认证
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json(
-        { error: '请先登录' },
-        { status: 401 },
-      );
-    }
-
     // 支持批量入库
-    const docsToProcess = documents ?? [{
+    let docsToProcess = documents ?? [{
       title,
       collection,
       content,
@@ -46,6 +55,14 @@ export async function POST(request: NextRequest) {
       chunkSize,
       overlap,
     }];
+
+    // 限制批量大小
+    if (Array.isArray(docsToProcess) && docsToProcess.length > MAX_BATCH_DOCS) {
+      return NextResponse.json(
+        { error: `单次最多处理 ${MAX_BATCH_DOCS} 篇文档，当前提交 ${docsToProcess.length} 篇` },
+        { status: 400 },
+      );
+    }
 
     const results: Array<{
       documentId: string;
@@ -76,6 +93,18 @@ export async function POST(request: NextRequest) {
             chunkCount: 0,
             status: 'error',
             error: `无效的 collection: ${doc.collection}。有效值: ${VALID_COLLECTIONS.join(', ')}`,
+          });
+          continue;
+        }
+
+        // 限制单文档内容大小 (最大 100KB)
+        if (typeof doc.content === 'string' && doc.content.length > 100_000) {
+          results.push({
+            documentId: '',
+            title: doc.title,
+            chunkCount: 0,
+            status: 'error',
+            error: '文档内容过大（最大 100KB）',
           });
           continue;
         }

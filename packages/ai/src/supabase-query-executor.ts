@@ -5,6 +5,16 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { QueryExecutor } from './structured-query-agent';
 
 export class SupabaseQueryExecutor implements QueryExecutor {
+  /** 字符串清理：移除可能影响 ilike 的特殊字符 */
+  private sanitize(input: string): string {
+    return input.replace(/[%_\\]/g, '').trim().slice(0, 100);
+  }
+
+  /** 限制 limit 在合理范围内 */
+  private clampLimit(limit: number | undefined, max: number = 50): number {
+    return Math.min(Math.max(limit ?? 20, 1), max);
+  }
+
   constructor(private readonly db: SupabaseClient) {}
 
   /** 按分数/位次搜索院校 */
@@ -16,7 +26,8 @@ export class SupabaseQueryExecutor implements QueryExecutor {
     tier?: string;
     limit?: number;
   }): Promise<unknown[]> {
-    const { province, year, minScore, maxScore, tier, limit = 20 } = params;
+    const { province, year, minScore, maxScore, tier } = params;
+    const limit = this.clampLimit(params.limit);
 
     let query = this.db
       .from('admission_scores')
@@ -65,7 +76,10 @@ export class SupabaseQueryExecutor implements QueryExecutor {
     tier?: string;
     limit?: number;
   }): Promise<unknown[]> {
-    const { universityName, universityId, province, tier, limit = 10 } = params;
+    const { province, tier } = params;
+    const limit = this.clampLimit(params.limit, 50);
+    const universityName = params.universityName ? this.sanitize(params.universityName) : undefined;
+    const universityId = params.universityId?.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 36);
 
     let query = this.db
       .from('universities')
@@ -89,7 +103,6 @@ export class SupabaseQueryExecutor implements QueryExecutor {
 
     // 批量查询排名和学科评估
     const uniIds = universities.map((u: any) => u.id);
-    const uniNames = universities.map((u: any) => u.name);
 
     const [rankRes, evalRes] = await Promise.all([
       this.db
@@ -135,7 +148,10 @@ export class SupabaseQueryExecutor implements QueryExecutor {
     category?: string;
     limit?: number;
   }): Promise<unknown[]> {
-    const { majorName, majorId, category, limit = 5 } = params;
+    const { category } = params;
+    const limit = this.clampLimit(params.limit, 20);
+    const majorName = params.majorName ? this.sanitize(params.majorName) : undefined;
+    const majorId = params.majorId?.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 36);
 
     let query = this.db.from('majors').select('*');
 
@@ -185,7 +201,10 @@ export class SupabaseQueryExecutor implements QueryExecutor {
     province: string;
     years?: number[];
   }): Promise<unknown[]> {
-    const { universityId, universityName, majorId, province, years } = params;
+    const { province, years } = params;
+    const universityName = params.universityName ? this.sanitize(params.universityName) : undefined;
+    const universityId = params.universityId?.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 36);
+    const majorId = params.majorId?.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 36);
 
     let query = this.db
       .from('admission_scores')
@@ -198,7 +217,7 @@ export class SupabaseQueryExecutor implements QueryExecutor {
       query = query.ilike('universities.name', `%${universityName}%`);
     }
     if (majorId) query = query.eq('major_id', majorId);
-    if (years?.length) query = query.in('year', years);
+    if (years?.length) query = query.in('year', years.slice(0, 10));
 
     query = query.order('year', { ascending: false }).limit(30);
 
@@ -266,7 +285,8 @@ export class SupabaseQueryExecutor implements QueryExecutor {
     category?: string;
     limit?: number;
   }): Promise<unknown[]> {
-    const { category, limit = 10 } = params;
+    const { category } = params;
+    const limit = this.clampLimit(params.limit, 50);
 
     let query = this.db
       .from('majors')

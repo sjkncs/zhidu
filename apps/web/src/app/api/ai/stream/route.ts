@@ -4,9 +4,23 @@
 
 import { NextRequest } from 'next/server';
 import { createLLMService } from '@zhidu/ai/llm-service';
+import { requireUser, authErrorResponse } from '@/lib/auth-utils';
+import { checkRateLimit, getRateLimitKey, rateLimitResponse, AI_CHAT_LIMIT } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
   try {
+    // 速率限制
+    const rlKey = getRateLimitKey(request);
+    const rl = checkRateLimit(`stream:${rlKey}`, AI_CHAT_LIMIT);
+    if (!rl.allowed) return rateLimitResponse(rl);
+
+    // 要求登录
+    try {
+      await requireUser();
+    } catch (err) {
+      return authErrorResponse(err);
+    }
+
     const body = await request.json();
     const { messages = [], model } = body;
 
@@ -17,9 +31,21 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // 限制消息数量（最多 20 条上下文）
+    const trimmedMessages = messages.slice(-20);
+
+    // 限制单条消息长度（最大 4000 字符）
+    for (const m of trimmedMessages) {
+      if (typeof m.content === 'string' && m.content.length > 4000) {
+        return new Response(JSON.stringify({ error: '单条消息过长，最多 4000 个字符' }), {
+          status: 400, headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     const llm = createLLMService();
     const stream = llm.chatStream({
-      messages: messages.map((m: any) => ({
+      messages: trimmedMessages.map((m: any) => ({
         role: m.role,
         content: m.content,
       })),

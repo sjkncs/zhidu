@@ -31,12 +31,10 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
 
-  // Protect /api/* routes (except those with their own auth)
-  const apiExceptions = ['/api/ai/chat', '/api/knowledge/seed'];
+  // Protect /api/* routes — each route also has its own auth check
   if (
     !user &&
-    pathname.startsWith('/api/') &&
-    !apiExceptions.some((exc) => pathname === exc || pathname.startsWith(exc + '/'))
+    pathname.startsWith('/api/')
   ) {
     return NextResponse.json({ error: '未登录' }, { status: 401 });
   }
