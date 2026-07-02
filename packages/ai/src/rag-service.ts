@@ -59,7 +59,7 @@ export function buildRAGPrompt(params: {
     .map((c, i) => `[${i + 1}] ${c.content}\n    — 来源: ${(c.metadata as any)?.title ?? '未知'} ${c.metadata?.collection ? `(${c.metadata.collection})` : ''}`)
     .join('\n\n');
 
-  const systemPrompt = `你是"智渡"平台的知识助手，专门回答高考志愿填报、大学专业、职业规划等问题。
+  const systemPrompt = `你是"知渡"平台的知识助手，专门回答高考志愿填报、大学专业、职业规划等问题。
 
 ## 回答规则
 
@@ -182,7 +182,7 @@ export function createRAGService(config: RAGServiceConfig): RAGService {
         const messages: Array<{ role: 'system' | 'user'; content: string }> = [
           {
             role: 'system',
-            content: `你是"智渡"平台的知识助手。当前知识库中未找到与该问题直接相关的资料。
+            content: `你是"知渡"平台的知识助手。当前知识库中未找到与该问题直接相关的资料。
 请基于你的通用知识给出回答，但要明确说明这是通用建议而非平台专有数据。
 如果涉及具体的分数线、政策细节等，建议用户咨询学校招生办或查阅官方文件。`,
           },

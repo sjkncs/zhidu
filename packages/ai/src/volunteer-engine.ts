@@ -420,8 +420,9 @@ export class VolunteerMatchingEngine {
 
   // ─── 数据查询层 ────────────────────────────────────────────────────────────
 
-  /** 从一分一段表获取分数对应位次 */
+  /** 从一分一段表获取分数对应位次（支持年份回退） */
   private async getRank(query: VolunteerQuery): Promise<number | null> {
+    // 先尝试精确年份
     const { data } = await this.db
       .from('score_rank_tables')
       .select('cumulative_rank')
@@ -429,12 +430,27 @@ export class VolunteerMatchingEngine {
       .eq('year', query.year)
       .eq('subject_type', query.subjectType)
       .eq('score', query.score)
-      .single();
-    return data?.cumulative_rank ?? null;
+      .maybeSingle();
+
+    if (data?.cumulative_rank) return data.cumulative_rank;
+
+    // 精确年份无数据，回退到最近的有数据年份
+    const { data: fallback } = await this.db
+      .from('score_rank_tables')
+      .select('cumulative_rank, year')
+      .eq('province', query.province)
+      .eq('subject_type', query.subjectType)
+      .eq('score', query.score)
+      .order('year', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    return fallback?.cumulative_rank ?? null;
   }
 
-  /** 获取当前年份省控线 */
+  /** 获取当前年份省控线（支持年份回退） */
   private async getScoreLine(query: VolunteerQuery): Promise<number> {
+    // 先尝试精确年份
     const { data } = await this.db
       .from('province_score_lines')
       .select('score_line')
@@ -443,8 +459,21 @@ export class VolunteerMatchingEngine {
       .eq('subject_type', query.subjectType)
       .order('batch', { ascending: true })
       .limit(1)
-      .single();
-    return data?.score_line ?? 0;
+      .maybeSingle();
+
+    if (data?.score_line) return data.score_line;
+
+    // 精确年份无数据，回退到最近的有数据年份
+    const { data: fallback } = await this.db
+      .from('province_score_lines')
+      .select('score_line, year')
+      .eq('province', query.province)
+      .eq('subject_type', query.subjectType)
+      .order('year', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    return fallback?.score_line ?? 0;
   }
 
   /** 查询历年录取数据 */

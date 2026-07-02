@@ -192,6 +192,12 @@ export interface AdmissionScoreRow {
   minRank?: number;
   /** 批次（本科一批、本科二批等） */
   batch?: string;
+  /** 科类/选科类型（物理类、历史类、理科、文科、综合） */
+  subjectGroup?: string;
+  /** 专业组名称 */
+  majorGroupName?: string;
+  /** 选科要求 */
+  subjectRequirements?: string;
 }
 
 /** 测评结果表 */

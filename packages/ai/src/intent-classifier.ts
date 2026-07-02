@@ -20,7 +20,7 @@ export interface IntentClassification {
 // 分类 Prompt
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CLASSIFIER_SYSTEM = `你是智渡AI平台的意图分类器。根据用户输入，精准识别意图并提取关键参数。
+const CLASSIFIER_SYSTEM = `你是知渡AI平台的意图分类器。根据用户输入，精准识别意图并提取关键参数。
 
 ## 任务类型说明
 - VOLUNTEER_MATCH: 高考志愿填报、分数线查询、位次估算、冲稳保推荐、院校匹配

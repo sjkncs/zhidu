@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
       {
         role: 'system',
-        content: `你是"智渡"平台的资深 HR 和简历优化专家。你的任务是根据用户提供的背景信息和目标岗位，生成一份结构化的专业简历内容。
+        content: `你是"知渡"平台的资深 HR 和简历优化专家。你的任务是根据用户提供的背景信息和目标岗位，生成一份结构化的专业简历内容。
 
 【输出要求】
 你必须且只能输出一个 JSON 对象，格式如下（不要输出任何其他文字）：

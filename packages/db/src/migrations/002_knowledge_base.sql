@@ -1,5 +1,5 @@
 -- ==========================================================================
--- 智渡 Phase 3: Knowledge Base & RAG
+-- 知渡 Phase 3: Knowledge Base & RAG
 -- 知识库 Schema Migration
 --
 -- 执行方式：在 Supabase Dashboard → SQL Editor 中粘贴执行

@@ -82,6 +82,45 @@ const POPULAR_CITIES = [
 const STEP_LABELS = ['查位次', '定方向', '理清逻辑', '生成方案'];
 const STEP_ICONS = [Search, Compass, Ruler, Target];
 
+// 新高考省份分类映射
+const NEW_GAOKAO_3PLUS3 = new Set([
+  '浙江', '上海', '北京', '天津', '山东', '海南',
+]);
+const NEW_GAOKAO_3PLUS1PLUS2 = new Set([
+  '河北', '辽宁', '江苏', '福建', '湖北', '湖南', '广东', '重庆',
+  '吉林', '黑龙江', '安徽', '江西', '广西', '贵州', '甘肃',
+]);
+
+interface SubjectOption {
+  value: string;
+  label: string;
+  description: string;
+}
+
+function getSubjectOptions(province: string): SubjectOption[] {
+  if (NEW_GAOKAO_3PLUS3.has(province)) {
+    return [
+      { value: '综合', label: '综合（3+3）', description: '不分文理，选考3门' },
+    ];
+  }
+  if (NEW_GAOKAO_3PLUS1PLUS2.has(province)) {
+    return [
+      { value: '物理类', label: '物理类', description: '首选物理，再选2门' },
+      { value: '历史类', label: '历史类', description: '首选历史，再选2门' },
+    ];
+  }
+  return [
+    { value: '理科', label: '理科', description: '传统理科方向' },
+    { value: '文科', label: '文科', description: '传统文科方向' },
+  ];
+}
+
+function getGaokaoMode(province: string): string {
+  if (NEW_GAOKAO_3PLUS3.has(province)) return '3+3 新高考';
+  if (NEW_GAOKAO_3PLUS1PLUS2.has(province)) return '3+1+2 新高考';
+  return '传统高考';
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function trendLabel(trend: 'up' | 'stable' | 'down') {
@@ -111,10 +150,23 @@ export default function VolunteerWizardPage() {
   // Step 1: 查位次
   const [score, setScore] = useState('');
   const [province, setProvince] = useState('');
+  const [subjectType, setSubjectType] = useState('');
   const [rankInput, setRankInput] = useState('');
   const [rankLoading, setRankLoading] = useState(false);
   const [rankResult, setRankResult] = useState<RankResult | null>(null);
   const [rankError, setRankError] = useState('');
+
+  // Auto-reset subject type when province changes
+  useEffect(() => {
+    if (province) {
+      const options = getSubjectOptions(province);
+      setSubjectType(options.length === 1 ? options[0].value : '');
+    } else {
+      setSubjectType('');
+    }
+    // Reset rank result when province changes
+    setRankResult(null);
+  }, [province]);
 
   // Step 2: 定方向
   const [preferences, setPreferences] = useState<Preferences>({
@@ -139,24 +191,32 @@ export default function VolunteerWizardPage() {
       setRankError('请填写分数和省份');
       return;
     }
+    const st = subjectType || getSubjectOptions(province)[0]?.value || '';
+    if (!st) {
+      setRankError('请选择科类');
+      return;
+    }
     setRankLoading(true);
     setRankError('');
     try {
       const params = new URLSearchParams({
         score: score,
         province: province,
+        subjectType: st,
       });
       if (rankInput) params.set('rank', rankInput);
 
       const res = await fetch(`/api/assessments/rank-to-score?${params}`);
-      if (!res.ok) throw new Error('查询失败，请稍后重试');
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || data.hint || '查询失败，请稍后重试');
+      }
 
       setRankResult({
         rank: data.data?.estimatedRank ?? data.rank ?? 0,
         score: Number(score),
         province,
-        percentile: data.data?.confidence ?? data.percentile ?? 0,
+        percentile: Math.round((data.data?.confidence ?? data.percentile ?? 0) * 100),
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '查询失败，请稍后重试';
@@ -164,7 +224,7 @@ export default function VolunteerWizardPage() {
     } finally {
       setRankLoading(false);
     }
-  }, [score, province, rankInput]);
+  }, [score, province, subjectType, rankInput]);
 
   // ── Step 4: Fetch recommendations ───────────────────────────────────────
 
@@ -174,32 +234,62 @@ export default function VolunteerWizardPage() {
     setRecError('');
     setPlanSaved(false);
     try {
-      const params = new URLSearchParams({
-        score,
-        province,
-        limit: '200',
+      const st = subjectType || getSubjectOptions(province)[0]?.value || '物理类';
+      const res = await fetch('/api/volunteer/recommend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          score: Number(score),
+          province,
+          subjectType: st,
+          year: 2025,
+          rank: rankResult?.rank || undefined,
+          preferredCities: preferences.cities.length ? preferences.cities : undefined,
+        }),
       });
-      if (preferences.categories.length) {
-        params.set('categories', preferences.categories.join(','));
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.error || '推荐方案生成失败，请稍后重试');
       }
-      if (preferences.cities.length) {
-        params.set('cities', preferences.cities.join(','));
+      const data = await res.json();
+      const rec = data.data ?? data;
+
+      // Map rush/stable/safe tiers to flat Recommendation[]
+      const items: Recommendation[] = [];
+      const mapTier = (tier: 'rush' | 'stable' | 'safe', list: any[]) => {
+        if (!Array.isArray(list)) return;
+        for (let i = 0; i < list.length; i++) {
+          const r = list[i];
+          items.push({
+            id: `${r.universityId ?? ''}_${r.majorId ?? ''}_${tier}_${i}`,
+            university: String(r.universityName ?? r.university ?? ''),
+            major: String(r.majorName ?? r.major ?? ''),
+            avgScore: Number(r.historicalAvgScore ?? r.avgScore ?? r.historicalMinScore ?? 0),
+            probability: Number(r.probability ?? 0),
+            trend: 'stable' as const,
+            category: tier,
+          });
+        }
+      };
+      mapTier('rush', rec.rush);
+      mapTier('stable', rec.stable);
+      mapTier('safe', rec.safe);
+
+      // Fallback: if no rush/stable/safe structure, try flat list
+      if (items.length === 0 && Array.isArray(rec)) {
+        for (const r of rec) {
+          items.push({
+            id: String(r.universityId ?? r.id ?? items.length),
+            university: String(r.universityName ?? r.university ?? ''),
+            major: String(r.majorName ?? r.major ?? ''),
+            avgScore: Number(r.historicalAvgScore ?? r.avgScore ?? 0),
+            probability: Number(r.probability ?? 0),
+            trend: 'stable' as const,
+            category: (r.tier?.toLowerCase() as 'rush' | 'stable' | 'safe') ?? 'stable',
+          });
+        }
       }
 
-      const res = await fetch(`/api/volunteer/recommend?${params}`);
-      if (!res.ok) throw new Error('推荐方案生成失败，请稍后重试');
-      const data = await res.json();
-      const items: Recommendation[] = (data.items ?? data.data ?? []).map(
-        (r: Record<string, unknown>, i: number) => ({
-          id: String(r.id ?? i),
-          university: String(r.university ?? r.school ?? ''),
-          major: String(r.major ?? ''),
-          avgScore: Number(r.avgScore ?? r.avg_score ?? 0),
-          probability: Number(r.probability ?? r.prob ?? 0),
-          trend: (r.trend as 'up' | 'stable' | 'down') ?? 'stable',
-          category: (r.category as 'rush' | 'stable' | 'safe') ?? 'stable',
-        }),
-      );
       setRecommendations(items);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '推荐方案生成失败';
@@ -421,6 +511,36 @@ export default function VolunteerWizardPage() {
               </select>
             </div>
           </div>
+
+          {/* 科类选择器 */}
+          {province && (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">科类</label>
+                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600">
+                  {getGaokaoMode(province)}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {getSubjectOptions(province).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setSubjectType(opt.value)}
+                    className={[
+                      'rounded-xl border-2 px-4 py-2.5 text-sm font-medium transition-all',
+                      subjectType === opt.value
+                        ? 'border-blue bg-blue/5 text-blue'
+                        : 'border-gray-200 bg-white text-gray-600 hover:border-blue/30 hover:bg-blue/5',
+                    ].join(' ')}
+                  >
+                    <span>{opt.label}</span>
+                    <span className="ml-1.5 text-xs text-text-tertiary">{opt.description}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <Input
             label="位次（选填）"

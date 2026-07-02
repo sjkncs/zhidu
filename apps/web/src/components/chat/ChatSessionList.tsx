@@ -58,13 +58,16 @@ export function ChatSessionList() {
           {label}
         </p>
         {items.map((s) => (
-          <button
+          <div
             key={s.id}
+            role="button"
+            tabIndex={0}
             onClick={() => loadSession(s.id)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') loadSession(s.id); }}
             onMouseEnter={() => setHoveredId(s.id)}
             onMouseLeave={() => setHoveredId(null)}
             className={[
-              'group relative flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
+              'group relative flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
               s.id === currentSessionId
                 ? 'bg-blue/10 text-blue font-medium'
                 : 'text-text-secondary hover:bg-surface-elevated hover:text-text-primary',
@@ -84,7 +87,7 @@ export function ChatSessionList() {
                 <Trash2 className="h-3 w-3" />
               </button>
             )}
-          </button>
+          </div>
         ))}
       </div>
     );

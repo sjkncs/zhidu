@@ -56,7 +56,7 @@ function parseArgs(): CLIArgs {
 
 function printUsage(): void {
   console.log(`
-智渡数据爬虫 CLI
+知渡数据爬虫 CLI
 
 用法:
   npx tsx src/crawl/cli.ts [options]
@@ -94,7 +94,7 @@ async function main(): Promise<void> {
 
   const args = parseArgs();
 
-  console.log('=== 智渡数据爬虫 ===');
+  console.log('=== 知渡数据爬虫 ===');
   console.log(`来源: ${args.source}`);
   console.log(`省份: ${args.province ?? '全部'}`);
   console.log(`年份: ${args.year ?? new Date().getFullYear()}`);

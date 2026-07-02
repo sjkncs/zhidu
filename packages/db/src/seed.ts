@@ -1,4 +1,4 @@
-// @zhidu/db — 种子数据脚本（智渡教育平台）
+// @zhidu/db — 种子数据脚本（知渡教育平台）
 // 为志愿推荐引擎插入院校、专业、录取分数线等参考数据
 // 运行方式: npx tsx src/seed.ts
 
@@ -400,7 +400,7 @@ async function batchUpsert(
 
 export async function main(): Promise<void> {
   console.log('═══════════════════════════════════════════════════════');
-  console.log('  智渡教育平台 — 数据库种子数据填充');
+  console.log('  知渡教育平台 — 数据库种子数据填充');
   console.log('═══════════════════════════════════════════════════════');
   console.log('');
 

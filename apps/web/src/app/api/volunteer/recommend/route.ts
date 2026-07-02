@@ -28,24 +28,21 @@ export async function POST(request: NextRequest) {
       tierFilter,
     } = body;
 
-    // 参数验证
     if (!score || typeof score !== 'number') {
       return NextResponse.json({ error: '缺少必填参数: score (分数)' }, { status: 400 });
     }
     if (!province || typeof province !== 'string') {
       return NextResponse.json({ error: '缺少必填参数: province (省份)' }, { status: 400 });
     }
-    if (!subjectType || typeof subjectType !== 'string') {
-      return NextResponse.json({ error: '缺少必填参数: subjectType (科类)' }, { status: 400 });
-    }
 
-    const queryYear = year ?? new Date().getFullYear();
+    const st = subjectType || '物理类';
+    const queryYear = year && year <= 2025 ? year : 2025;
 
     const engine = new VolunteerMatchingEngine();
     const recommendation = await engine.recommend({
       score,
       province,
-      subjectType,
+      subjectType: st,
       year: queryYear,
       rank: rank ?? undefined,
       preferredMajorIds: preferredMajorIds ?? undefined,
@@ -53,10 +50,7 @@ export async function POST(request: NextRequest) {
       tierFilter: tierFilter ?? undefined,
     });
 
-    return NextResponse.json({
-      success: true,
-      data: recommendation,
-    });
+    return NextResponse.json({ success: true, data: recommendation });
   } catch (err: any) {
     console.error('[volunteer/recommend]', err);
     return NextResponse.json(
@@ -66,12 +60,12 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// 保留 GET 兼容性（旧版接口）
+// GET 兼容性（旧版接口 + 前端旧代码）
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const score = parseInt(searchParams.get('score') ?? '0');
   const province = searchParams.get('province') ?? '';
-  const subjectType = searchParams.get('subjectType') ?? '理科';
+  const subjectType = searchParams.get('subjectType') ?? '物理类';
 
   if (!score || !province) {
     return NextResponse.json(
@@ -86,21 +80,17 @@ export async function GET(request: NextRequest) {
       score,
       province,
       subjectType,
-      year: new Date().getFullYear(),
+      year: 2025,
     });
 
     return NextResponse.json({
       success: true,
-      data: {
-        score,
-        province,
-        ...recommendation,
-      },
+      data: { score, province, ...recommendation },
     });
   } catch (err: any) {
     console.error('[API] volunteer recommend error:', err);
     return NextResponse.json(
-      { error: '推荐服务暂时不可用，请稍后重试' },
+      { error: err.message || '推荐服务暂时不可用，请稍后重试' },
       { status: 500 },
     );
   }

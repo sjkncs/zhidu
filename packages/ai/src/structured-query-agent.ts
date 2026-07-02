@@ -54,7 +54,7 @@ export interface StructuredQueryResult {
 // 查询解析 Prompt
 // ─────────────────────────────────────────────────────────────────────────────
 
-const QUERY_PARSER_SYSTEM = `你是智渡平台的结构化查询解析器。将用户的自然语言问题转换为结构化数据库查询。
+const QUERY_PARSER_SYSTEM = `你是知渡平台的结构化查询解析器。将用户的自然语言问题转换为结构化数据库查询。
 
 ## 查询类型
 - UNIVERSITY_SEARCH: 按分数/位次搜索可报考的院校（"XX分能上什么大学"、"位次XXXX有哪些学校"）

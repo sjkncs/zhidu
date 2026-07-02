@@ -297,7 +297,7 @@ export function buildVolunteerAnalysisPrompt(params: {
   return [
     {
       role: 'system',
-      content: `你是"智渡"平台的专业高考志愿填报顾问。你需要基于规则引擎生成的推荐方案，为学生提供深入浅出的解读。
+      content: `你是"知渡"平台的专业高考志愿填报顾问。你需要基于规则引擎生成的推荐方案，为学生提供深入浅出的解读。
 解读要点：
 1. 总体方案概述（冲稳保比例是否合理）
 2. 冲一冲的学校：分析风险和机会，给出建议
@@ -338,7 +338,7 @@ export function buildMajorComparisonPrompt(majors: string[], context?: string): 
   return [
     {
       role: 'system',
-      content: `你是"智渡"平台的专业分析顾问。请从以下维度对比分析给定的专业：
+      content: `你是"知渡"平台的专业分析顾问。请从以下维度对比分析给定的专业：
 1. 核心课程与学习内容
 2. 就业方向与前景
 3. 薪资水平（参考数据）
@@ -374,7 +374,7 @@ export function buildCareerPathPrompt(params: {
   return [
     {
       role: 'system',
-      content: `你是"智渡"平台的资深生涯规划师 AI。你的任务是根据用户的专业方向和个人测评结果，生成 3-5 条结构化职业发展路径。
+      content: `你是"知渡"平台的资深生涯规划师 AI。你的任务是根据用户的专业方向和个人测评结果，生成 3-5 条结构化职业发展路径。
 
 【输出要求】
 你必须且只能输出一个 JSON 对象，格式如下（不要输出任何其他文字）：
@@ -453,7 +453,7 @@ export function buildSkillTreePrompt(params: {
   return [
     {
       role: 'system',
-      content: `你是"智渡"平台的技能规划师 AI。你的任务是根据用户的专业方向和职业目标，生成一棵结构化的技能树。
+      content: `你是"知渡"平台的技能规划师 AI。你的任务是根据用户的专业方向和职业目标，生成一棵结构化的技能树。
 
 【输出要求】
 你必须且只能输出一个 JSON 对象，格式如下：
@@ -558,7 +558,7 @@ export function buildWeeklyReviewPrompt(params: {
   return [
     {
       role: 'system',
-      content: `你是"智渡"平台的时间管理教练 AI。你需要根据用户本周的时间使用数据，生成一份结构化的周回顾报告。
+      content: `你是"知渡"平台的时间管理教练 AI。你需要根据用户本周的时间使用数据，生成一份结构化的周回顾报告。
 
 【输出要求】
 你必须且只能输出一个 JSON 对象，格式如下：
@@ -659,7 +659,7 @@ export function buildGrowthInsightsPrompt(params: {
   return [
     {
       role: 'system',
-      content: `你是"智渡"平台的成长洞察分析师 AI。你需要根据用户一段时间内的日记记录，生成结构化的成长洞察报告。
+      content: `你是"知渡"平台的成长洞察分析师 AI。你需要根据用户一段时间内的日记记录，生成结构化的成长洞察报告。
 
 【输出要求】
 你必须且只能输出一个 JSON 对象，格式如下：
