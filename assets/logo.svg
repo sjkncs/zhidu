@@ -37,9 +37,9 @@
 
   <!-- Main icon: rounded square with "知" -->
   <rect x="156" y="100" width="200" height="200" rx="40" fill="url(#icon-bg)" filter="url(#glow)"/>
-  <text x="256" y="248" font-family="'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif"
-        font-size="128" font-weight="700" fill="white" text-anchor="middle"
-        dominant-baseline="central" dy="-12">知</text>
+  <text x="256" y="200" font-family="'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif"
+        font-size="120" font-weight="700" fill="white" text-anchor="middle"
+        dominant-baseline="central">知</text>
 
   <!-- Bridge line (渡 = crossing) -->
   <path d="M100 350 Q 256 310 412 350" stroke="url(#bridge)" stroke-width="3" fill="none" stroke-linecap="round"/>
