@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Clock, ListTodo, Timer, CalendarDays } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import TimeManager from '@/components/time/TimeManager';
 
 type TabKey = 'manager';

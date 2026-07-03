@@ -253,3 +253,6 @@ export {
   isMLServiceAvailable,
 } from './ml-predict-client';
 export type { MLPredictInput, MLPredictResult } from './ml-predict-client';
+
+// User context gatherer
+export { gatherUserContext } from './user-context-gatherer';

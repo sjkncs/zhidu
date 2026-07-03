@@ -1,10 +1,20 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { ArrowUp, Loader2, Paperclip, Mic } from 'lucide-react';
+import { ArrowUp, Loader2, Paperclip, Mic, Zap, BookOpen, MessageCircle } from 'lucide-react';
+
+export type ChatMode = 'auto' | 'knowledge' | 'freechat';
+
+const MODE_CONFIG: Record<ChatMode, { label: string; icon: React.ComponentType<{ className?: string }>; description: string }> = {
+  auto: { label: '自动路由', icon: Zap, description: 'AI 自动判断走知识库还是直接对话' },
+  knowledge: { label: '知识库优先', icon: BookOpen, description: '优先检索知识库参考资料' },
+  freechat: { label: '自由对话', icon: MessageCircle, description: '跳过知识库，直接与 LLM 对话' },
+};
+
+const MODE_ORDER: ChatMode[] = ['auto', 'knowledge', 'freechat'];
 
 interface ChatInputProps {
-  onSend: (message: string) => void;
+  onSend: (message: string, preferMode?: ChatMode) => void;
   disabled?: boolean;
   isStreaming?: boolean;
 }
@@ -12,6 +22,7 @@ interface ChatInputProps {
 export function ChatInput({ onSend, disabled, isStreaming }: ChatInputProps) {
   const [value, setValue] = useState('');
   const [isFocused, setIsFocused] = useState(false);
+  const [mode, setMode] = useState<ChatMode>('auto');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const adjustHeight = useCallback(() => {
@@ -26,10 +37,15 @@ export function ChatInput({ onSend, disabled, isStreaming }: ChatInputProps) {
     adjustHeight();
   }, [value, adjustHeight]);
 
+  const cycleMode = () => {
+    const idx = MODE_ORDER.indexOf(mode);
+    setMode(MODE_ORDER[(idx + 1) % MODE_ORDER.length]);
+  };
+
   const handleSend = () => {
     const trimmed = value.trim();
     if (!trimmed || disabled || isStreaming) return;
-    onSend(trimmed);
+    onSend(trimmed, mode);
     setValue('');
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -117,11 +133,24 @@ export function ChatInput({ onSend, disabled, isStreaming }: ChatInputProps) {
           </div>
         </div>
 
-        {/* 底部提示 */}
+        {/* 底部提示 + 模式切换 */}
         <div className="mx-auto mt-2 flex max-w-3xl items-center justify-between px-1">
-          <p className="text-[11px] text-text-tertiary/60">
-            Enter 发送 · Shift+Enter 换行 · AI 回答仅供参考
-          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={cycleMode}
+              title={MODE_CONFIG[mode].description}
+              className="flex items-center gap-1 rounded-md border border-border/40 px-2 py-0.5 text-[11px] font-medium text-text-secondary transition-colors hover:border-blue/30 hover:bg-blue/[0.04] hover:text-blue"
+            >
+              {(() => {
+                const Icon = MODE_CONFIG[mode].icon;
+                return <Icon className="h-3 w-3" />;
+              })()}
+              {MODE_CONFIG[mode].label}
+            </button>
+            <p className="text-[11px] text-text-tertiary/60">
+              Enter 发送 · Shift+Enter 换行 · AI 回答仅供参考
+            </p>
+          </div>
           <div className="flex items-center gap-1.5">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400/80" />
             <span className="text-[11px] text-text-tertiary/60">知识库已连接</span>

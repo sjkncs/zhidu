@@ -69,10 +69,10 @@ export async function POST(request: NextRequest) {
           .from('assessments')
           .insert({
             user_id: user.id,
-            type: 'mbti',
+            type: 'MBTI',
             result: result as unknown as Record<string, unknown>,
-            answers: answers as unknown as Record<string, unknown>[],
-            created_at: new Date().toISOString(),
+            raw_scores: answers as unknown as Record<string, unknown>,
+            taken_at: new Date().toISOString(),
           })
           .select('id')
           .single();

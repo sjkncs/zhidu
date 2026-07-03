@@ -23,6 +23,7 @@ import {
   AlertCircle,
   BarChart3,
   Filter,
+  RefreshCw,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -104,6 +105,14 @@ function getMonthRange(year: number, month: number): { startDate: string; endDat
 
 function getMonthLabel(year: number, month: number): string {
   return `${year}年${month}月`;
+}
+
+const PERCENT = 100;
+const MAX_RETRY = 2;
+const RETRY_DELAY_MS = 800;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 function CategoryIcon({ category, className }: { category: string; className?: string }) {
@@ -629,8 +638,8 @@ function CategoryBreakdown({ transactions }: { transactions: Transaction[] }) {
 
       <div className="space-y-4">
         {sorted.map(([cat, amount], idx) => {
-          const pct = maxAmount > 0 ? (amount / maxAmount) * 100 : 0;
-          const shareOfTotal = totalExpense > 0 ? ((amount / totalExpense) * 100).toFixed(1) : '0';
+          const pct = maxAmount > 0 ? (amount / maxAmount) * PERCENT : 0;
+          const shareOfTotal = totalExpense > 0 ? ((amount / totalExpense) * PERCENT).toFixed(1) : '0';
 
           return (
             <div key={cat}>
@@ -650,7 +659,14 @@ function CategoryBreakdown({ transactions }: { transactions: Transaction[] }) {
               </div>
 
               {/* Progress bar */}
-              <div className="h-2 w-full rounded-full bg-border/50 overflow-hidden">
+              <div
+                className="h-2 w-full rounded-full bg-border/50 overflow-hidden"
+                role="progressbar"
+                aria-valuenow={Math.round(pct)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={`${cat} 占支出 ${shareOfTotal}%`}
+              >
                 <div
                   className={`h-full rounded-full transition-all ${barColors[idx] || 'bg-gray-400'}`}
                   style={{ width: `${pct}%` }}
@@ -681,6 +697,7 @@ export default function FinanceTracker() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [summary, setSummary] = useState<Summary>({ totalIncome: 0, totalExpense: 0, balance: 0 });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Filter state
   const now = new Date();
@@ -688,51 +705,68 @@ export default function FinanceTracker() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [typeFilter, setTypeFilter] = useState<'ALL' | 'EXPENSE' | 'INCOME'>('ALL');
 
-  // Fetch transactions for current month + filter
-  const fetchTransactions = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      const { startDate, endDate } = getMonthRange(year, month);
-      params.set('startDate', startDate);
-      params.set('endDate', endDate);
-      if (typeFilter !== 'ALL') {
-        params.set('type', typeFilter);
-      }
+  // Fetch transactions for current month + filter (with AbortSignal + retry)
+  const fetchTransactions = useCallback(
+    async (signal: AbortSignal) => {
+      setLoading(true);
+      setError(null);
 
-      const res = await fetch(`/api/finance?${params.toString()}`);
-      if (!res.ok) throw new Error(`获取交易记录失败 (${res.status})`);
-      const json = await res.json();
-
-      const data: Transaction[] = json.data ?? [];
-      setTransactions(data);
-
-      // Summary is computed server-side from ALL transactions in the date range
-      // But we also recompute client-side for the current filter view
-      if (json.summary) {
-        // If filtering by type, recompute summary from data
-        if (typeFilter !== 'ALL') {
-          let totalIncome = 0;
-          let totalExpense = 0;
-          for (const t of data) {
-            if (t.type === 'INCOME') totalIncome += t.amount;
-            else totalExpense += t.amount;
+      for (let attempt = 0; attempt <= MAX_RETRY; attempt++) {
+        try {
+          const params = new URLSearchParams();
+          const { startDate, endDate } = getMonthRange(year, month);
+          params.set('startDate', startDate);
+          params.set('endDate', endDate);
+          if (typeFilter !== 'ALL') {
+            params.set('type', typeFilter);
           }
-          setSummary({ totalIncome, totalExpense, balance: totalIncome - totalExpense });
-        } else {
-          setSummary(json.summary);
+
+          const res = await fetch(`/api/finance?${params.toString()}`, { signal });
+          if (!res.ok) throw new Error(`获取交易记录失败 (${res.status})`);
+          const json = await res.json();
+
+          const data: Transaction[] = json.data ?? [];
+          setTransactions(data);
+
+          // Summary is computed server-side from ALL transactions in the date range
+          // But we also recompute client-side for the current filter view
+          if (json.summary) {
+            if (typeFilter !== 'ALL') {
+              let totalIncome = 0;
+              let totalExpense = 0;
+              for (const t of data) {
+                if (t.type === 'INCOME') totalIncome += t.amount;
+                else totalExpense += t.amount;
+              }
+              setSummary({ totalIncome, totalExpense, balance: totalIncome - totalExpense });
+            } else {
+              setSummary(json.summary);
+            }
+          }
+          return; // success
+        } catch (err) {
+          if (signal.aborted) return;
+          console.error(`[FinanceTracker] 加载失败 (第${attempt + 1}次)`, err);
+          if (attempt < MAX_RETRY) {
+            await delay(RETRY_DELAY_MS * (attempt + 1));
+            if (signal.aborted) return;
+          } else {
+            const msg = err instanceof Error ? err.message : '加载交易记录失败';
+            setError(msg);
+          }
+        } finally {
+          if (!signal.aborted) setLoading(false);
         }
       }
-    } catch {
-      // Silently fail; list will show empty state
-    } finally {
-      setLoading(false);
-    }
-  }, [year, month, typeFilter]);
+    },
+    [year, month, typeFilter],
+  );
 
-  // Initial load + filter changes
+  // Initial load + filter changes (with abort on cleanup)
   useEffect(() => {
-    fetchTransactions();
+    const controller = new AbortController();
+    fetchTransactions(controller.signal);
+    return () => controller.abort();
   }, [fetchTransactions]);
 
   // Month navigation
@@ -756,7 +790,8 @@ export default function FinanceTracker() {
 
   // After creating a new transaction
   const handleCreated = useCallback(() => {
-    fetchTransactions();
+    const controller = new AbortController();
+    fetchTransactions(controller.signal);
   }, [fetchTransactions]);
 
   // After deleting a transaction (optimistic remove)
@@ -778,10 +813,34 @@ export default function FinanceTracker() {
     [],
   );
 
+  // Retry handler
+  const handleRetry = useCallback(() => {
+    const controller = new AbortController();
+    fetchTransactions(controller.signal);
+  }, [fetchTransactions]);
+
   return (
     <div className="space-y-6">
       {/* Summary cards */}
       <SummaryCards summary={summary} />
+
+      {/* Error banner */}
+      {error && (
+        <div className="flex items-center justify-between rounded-xl border border-red-500/20 bg-red-500/[0.04] px-5 py-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
+            <span className="text-sm text-text-secondary">{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleRetry}
+            className="flex items-center gap-1.5 rounded-lg bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-500 transition hover:bg-red-500/20"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            重试
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         {/* Left column: Quick add + Category breakdown */}

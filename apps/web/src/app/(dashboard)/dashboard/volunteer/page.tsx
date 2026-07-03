@@ -24,6 +24,10 @@ import {
   AlertTriangle,
   Flame,
   Shield,
+  X,
+  Check,
+  ChevronLeft,
+  Loader2,
 } from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -184,6 +188,48 @@ export default function VolunteerWizardPage() {
   const [recError, setRecError] = useState('');
   const [planSaved, setPlanSaved] = useState(false);
 
+  // MBTI Assessment Modal
+  const [showMbti, setShowMbti] = useState(false);
+  const [mbtiQuestions, setMbtiQuestions] = useState<Array<{ id: number; text: string; optionA: { text: string; pole: string }; optionB: { text: string; pole: string } }>>([]);
+  const [mbtiAnswers, setMbtiAnswers] = useState<Record<number, 'A' | 'B'>>({});
+  const [mbtiResult, setMbtiResult] = useState<any>(null);
+  const [mbtiLoading, setMbtiLoading] = useState(false);
+
+  const startMbti = async () => {
+    setShowMbti(true);
+    setMbtiResult(null);
+    setMbtiAnswers({});
+    try {
+      const res = await fetch('/api/assessments/mbti');
+      const json = await res.json();
+      if (json.success) setMbtiQuestions(json.data.questions);
+    } catch {
+      // silently fail
+    }
+  };
+
+  const submitMbti = async () => {
+    if (Object.keys(mbtiAnswers).length < mbtiQuestions.length) return;
+    setMbtiLoading(true);
+    try {
+      const answers = mbtiQuestions.map((q) => ({
+        questionId: q.id,
+        choice: mbtiAnswers[q.id],
+      }));
+      const res = await fetch('/api/assessments/mbti', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answers }),
+      });
+      const json = await res.json();
+      if (json.success) setMbtiResult(json.data);
+    } catch {
+      // silently fail
+    } finally {
+      setMbtiLoading(false);
+    }
+  };
+
   // ── Step 1: Fetch rank ──────────────────────────────────────────────────
 
   const fetchRank = useCallback(async () => {
@@ -191,9 +237,10 @@ export default function VolunteerWizardPage() {
       setRankError('请填写分数和省份');
       return;
     }
-    const st = subjectType || getSubjectOptions(province)[0]?.value || '';
+    const options = getSubjectOptions(province);
+    const st = subjectType || (options.length === 1 ? options[0].value : '');
     if (!st) {
-      setRankError('请选择科类');
+      setRankError('请选择科类（物理类/历史类等）');
       return;
     }
     setRankLoading(true);
@@ -339,7 +386,7 @@ export default function VolunteerWizardPage() {
 
   const savePlan = async () => {
     try {
-      const res = await fetch('/api/volunteer/plan', {
+      const res = await fetch('/api/volunteer/plans', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -512,15 +559,17 @@ export default function VolunteerWizardPage() {
             </div>
           </div>
 
-          {/* 科类选择器 */}
-          {province && (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700">科类</label>
+          {/* 科类选择器 — 始终可见，省份未选时 disabled */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">科类</label>
+              {province ? (
                 <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600">
                   {getGaokaoMode(province)}
                 </span>
-              </div>
+              ) : null}
+            </div>
+            {province ? (
               <div className="flex flex-wrap gap-2">
                 {getSubjectOptions(province).map((opt) => (
                   <button
@@ -539,8 +588,10 @@ export default function VolunteerWizardPage() {
                   </button>
                 ))}
               </div>
-            </div>
-          )}
+            ) : (
+              <p className="text-xs text-text-tertiary">请先选择省份，科类选项将自动出现</p>
+            )}
+          </div>
 
           <Input
             label="位次（选填）"
@@ -689,7 +740,7 @@ export default function VolunteerWizardPage() {
               完成 MBTI / 霍兰德职业测评，获取更精准的专业匹配建议
             </p>
           </div>
-          <Button variant="secondary" size="sm">
+          <Button variant="secondary" size="sm" onClick={startMbti}>
             开始测评
           </Button>
         </div>
@@ -1133,6 +1184,104 @@ export default function VolunteerWizardPage() {
           )}
         </div>
       </div>
+
+      {/* ── MBTI Assessment Modal ── */}
+      {showMbti && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="mx-4 max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-surface p-6 shadow-2xl">
+            {/* Header */}
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Brain className="h-5 w-5 text-purple-500" />
+                <h2 className="text-lg font-bold text-text-primary">MBTI 性格测评</h2>
+              </div>
+              <button onClick={() => setShowMbti(false)} className="rounded-lg p-1 text-text-tertiary hover:bg-surface-elevated">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Result view */}
+            {mbtiResult ? (
+              <div className="space-y-4">
+                <div className="rounded-xl bg-purple-500/10 p-4 text-center">
+                  <p className="text-2xl font-bold text-purple-600">{mbtiResult.type}</p>
+                  <p className="mt-1 text-sm text-text-secondary">{mbtiResult.description}</p>
+                </div>
+                {mbtiResult.suggestedMajors && (
+                  <div>
+                    <h3 className="mb-2 text-sm font-semibold text-text-primary">推荐专业方向</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {mbtiResult.suggestedMajors.map((m: string) => (
+                        <span key={m} className="rounded-lg bg-purple-500/10 px-3 py-1 text-xs font-medium text-purple-600">{m}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {mbtiResult.suggestedCareers && (
+                  <div>
+                    <h3 className="mb-2 text-sm font-semibold text-text-primary">推荐职业方向</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {mbtiResult.suggestedCareers.map((c: string) => (
+                        <span key={c} className="rounded-lg bg-blue/10 px-3 py-1 text-xs font-medium text-blue">{c}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <Button onClick={() => setShowMbti(false)} className="w-full">关闭</Button>
+              </div>
+            ) : mbtiQuestions.length > 0 ? (
+              /* Questions view */
+              <div className="space-y-3">
+                <p className="text-xs text-text-tertiary">
+                  已完成 {Object.keys(mbtiAnswers).length} / {mbtiQuestions.length} 题
+                </p>
+                {mbtiQuestions.map((q, i) => (
+                  <div key={q.id} className="rounded-xl border border-border bg-background p-3">
+                    <p className="mb-2 text-sm font-medium text-text-primary">
+                      <span className="mr-1.5 text-text-tertiary">{i + 1}.</span>{q.text}
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setMbtiAnswers((prev) => ({ ...prev, [q.id]: 'A' }))}
+                        className={[
+                          'flex-1 rounded-lg border px-3 py-2 text-left text-xs transition-colors',
+                          mbtiAnswers[q.id] === 'A'
+                            ? 'border-purple-500 bg-purple-500/10 text-purple-600 font-medium'
+                            : 'border-border text-text-secondary hover:border-purple-500/30',
+                        ].join(' ')}
+                      >
+                        A. {q.optionA.text}
+                      </button>
+                      <button
+                        onClick={() => setMbtiAnswers((prev) => ({ ...prev, [q.id]: 'B' }))}
+                        className={[
+                          'flex-1 rounded-lg border px-3 py-2 text-left text-xs transition-colors',
+                          mbtiAnswers[q.id] === 'B'
+                            ? 'border-purple-500 bg-purple-500/10 text-purple-600 font-medium'
+                            : 'border-border text-text-secondary hover:border-purple-500/30',
+                        ].join(' ')}
+                      >
+                        B. {q.optionB.text}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <Button
+                  onClick={submitMbti}
+                  disabled={Object.keys(mbtiAnswers).length < mbtiQuestions.length || mbtiLoading}
+                  className="w-full"
+                >
+                  {mbtiLoading ? '计算中...' : '提交并查看结果'}
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-purple-500" />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

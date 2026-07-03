@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { parseSSEStream, type Source } from '@/lib/sse-parser';
+import type { ChatMode } from '@/components/chat/ChatInput';
 
 export interface ChatMessage {
   id: string;
@@ -25,7 +26,7 @@ interface ChatState {
   isStreaming: boolean;
   error: string | null;
 
-  sendMessage: (query: string) => Promise<void>;
+  sendMessage: (query: string, preferMode?: ChatMode) => Promise<void>;
   clearMessages: () => void;
   clearError: () => void;
   fetchSessions: () => Promise<void>;
@@ -98,7 +99,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  sendMessage: async (query: string) => {
+  sendMessage: async (query: string, preferMode?: ChatMode) => {
     const trimmed = query.trim();
     if (!trimmed || get().isStreaming) return;
 
@@ -142,6 +143,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           stream: true,
           context,
           sessionId: get().currentSessionId,
+          preferMode,
         }),
       });
 

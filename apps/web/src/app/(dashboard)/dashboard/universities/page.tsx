@@ -18,6 +18,13 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
+  ExternalLink,
+  GraduationCap,
+  FlaskConical,
+  Landmark,
+  Trophy,
+  School,
+  Heart,
 } from 'lucide-react';
 import { Badge } from '@zhidu/ui';
 
@@ -33,6 +40,7 @@ interface University {
   tier: string;
   is_public: boolean;
   website?: string;
+  logo?: string;
   tags?: string[];
   is_985?: boolean;
   is_211?: boolean;
@@ -460,70 +468,157 @@ function UniversityRow({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 详情面板
+// 详情面板 — 分段卡片式重设计
 // ─────────────────────────────────────────────────────────────────────────────
+
+const SEGMENT_ICONS = [Landmark, GraduationCap, FlaskConical, Trophy, School, Heart];
+const SEGMENT_LABELS = ['院校概况', '学科建设', '科研实力', '办学成就', '校园文化', '社会服务'];
+
+function splitDescription(text: string): { title: string; content: string }[] {
+  // Split by double newlines, then by sentence groups
+  const paragraphs = text
+    .split(/\n{2,}|(?<=。)(?=[^\s])/g)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 20);
+
+  if (paragraphs.length === 0) return [];
+
+  // Group into max 5 segments
+  const segments: { title: string; content: string }[] = [];
+  const chunkSize = Math.max(1, Math.ceil(paragraphs.length / 5));
+  for (let i = 0; i < paragraphs.length && segments.length < 5; i += chunkSize) {
+    const chunk = paragraphs.slice(i, i + chunkSize);
+    segments.push({
+      title: SEGMENT_LABELS[segments.length] || '更多信息',
+      content: chunk.join(''),
+    });
+  }
+  return segments;
+}
 
 function DetailPanel({ data }: {
   data: { university: University; rankings: Ranking[]; disciplineEvaluations: DisciplineEval[] };
 }) {
   const { university: uni, rankings, disciplineEvaluations } = data;
+  const descSegments = uni.description ? splitDescription(uni.description) : [];
 
   return (
-    <div className="space-y-4">
-      {/* 基本信息 */}
-      {uni.description && (
-        <p className="text-sm leading-relaxed text-text-secondary">{uni.description}</p>
-      )}
+    <div className="space-y-5">
+      {/* ── Hero Card ── */}
+      <div className="relative overflow-hidden rounded-xl border border-border bg-gradient-to-br from-blue/[0.03] to-transparent p-5">
+        <div className="flex items-start gap-4">
+          {/* Logo */}
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-white shadow-sm">
+            {uni.logo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={uni.logo}
+                alt={`${uni.name} 校徽`}
+                className="h-12 w-12 object-contain"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            ) : (
+              <Building2 className="h-8 w-8 text-blue/40" />
+            )}
+          </div>
 
+          {/* Name + badges + motto */}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-lg font-bold text-text-primary">{uni.name}</h3>
+              {(uni.is_985 || uni.tier === '985') && <Badge color="red">985</Badge>}
+              {(uni.is_211 || uni.tier === '211') && <Badge color="yellow">211</Badge>}
+              {(uni.is_dual_first_class || uni.tier === '双一流') && <Badge color="blue">双一流</Badge>}
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-text-secondary">
+              <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{uni.province}{uni.city && uni.city !== uni.province ? ` · ${uni.city}` : ''}</span>
+              {uni.school_type && <span>{uni.school_type}</span>}
+              {uni.founding_year && (
+                <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{uni.founding_year}年创办</span>
+              )}
+              {uni.affiliated && (
+                <span className="flex items-center gap-1"><Award className="h-3 w-3" />{uni.affiliated}</span>
+              )}
+            </div>
+            {uni.motto && (
+              <p className="mt-2 text-xs italic text-text-tertiary">"{uni.motto}"</p>
+            )}
+          </div>
+
+          {/* Website link */}
+          {uni.website && (
+            <a
+              href={uni.website.startsWith('http') ? uni.website : `https://${uni.website}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-blue transition-colors hover:bg-blue/5 hover:border-blue/30"
+            >
+              <Globe className="h-3.5 w-3.5" />
+              官网
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+        </div>
+      </div>
+
+      {/* ── Stats Grid ── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {uni.affiliated && (
-          <InfoItem icon={<Award className="h-3.5 w-3.5" />} label="隶属" value={uni.affiliated} />
-        )}
         {uni.education_level && (
-          <InfoItem icon={<BookOpen className="h-3.5 w-3.5" />} label="办学层次" value={uni.education_level} />
+          <StatCard icon={<BookOpen className="h-4 w-4" />} label="办学层次" value={uni.education_level} />
         )}
         {uni.master_programs !== undefined && uni.master_programs > 0 && (
-          <InfoItem icon={<Star className="h-3.5 w-3.5" />} label="硕士点" value={String(uni.master_programs)} />
+          <StatCard icon={<GraduationCap className="h-4 w-4" />} label="硕士点" value={String(uni.master_programs)} />
         )}
         {uni.doctoral_programs !== undefined && uni.doctoral_programs > 0 && (
-          <InfoItem icon={<Star className="h-3.5 w-3.5" />} label="博士点" value={String(uni.doctoral_programs)} />
+          <StatCard icon={<FlaskConical className="h-4 w-4" />} label="博士点" value={String(uni.doctoral_programs)} />
         )}
         {uni.gender_ratio && (
-          <InfoItem icon={<Users className="h-3.5 w-3.5" />} label="男女比" value={uni.gender_ratio} />
-        )}
-        {uni.admission_phone && (
-          <InfoItem icon={<Phone className="h-3.5 w-3.5" />} label="招办电话" value={uni.admission_phone} />
-        )}
-        {uni.website && (
-          <InfoItem icon={<Globe className="h-3.5 w-3.5" />} label="官网" value={uni.website} />
-        )}
-        {uni.motto && (
-          <InfoItem icon={<BookOpen className="h-3.5 w-3.5" />} label="校训" value={uni.motto} />
+          <StatCard icon={<Users className="h-4 w-4" />} label="男女比" value={uni.gender_ratio} />
         )}
       </div>
 
-      {/* 国家特色专业 */}
-      {uni.national_specialties && uni.national_specialties.length > 0 && (
-        <div>
-          <h4 className="mb-2 text-xs font-medium text-text-secondary">国家特色专业</h4>
-          <div className="flex flex-wrap gap-1.5">
-            {uni.national_specialties.map((s) => (
-              <Badge key={s} color="blue">{s}</Badge>
-            ))}
-          </div>
+      {/* ── Description Segments ── */}
+      {descSegments.length > 0 && (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {descSegments.map((seg, i) => {
+            const Icon = SEGMENT_ICONS[i % SEGMENT_ICONS.length];
+            return (
+              <div
+                key={seg.title}
+                className="rounded-xl border border-border bg-surface p-4"
+              >
+                <div className="mb-2 flex items-center gap-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue/10">
+                    <Icon className="h-3.5 w-3.5 text-blue" />
+                  </div>
+                  <h4 className="text-sm font-semibold text-text-primary">{seg.title}</h4>
+                </div>
+                <p className="text-xs leading-relaxed text-text-secondary">{seg.content}</p>
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {/* 排名 */}
+      {/* ── Rankings (interactive) ── */}
       {rankings.length > 0 && (
         <div>
-          <h4 className="mb-2 text-xs font-medium text-text-secondary">院校排名</h4>
+          <h4 className="mb-2.5 text-sm font-semibold text-text-primary">院校排名</h4>
           <div className="flex flex-wrap gap-2">
-            {rankings.slice(0, 6).map((r) => (
-              <div key={r.id} className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs">
-                <span className="text-text-secondary">{r.source} {r.year}</span>
+            {rankings.slice(0, 9).map((r) => (
+              <div
+                key={r.id}
+                className="group flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2 transition-colors hover:border-blue/30 hover:bg-blue/[0.02]"
+              >
+                <Trophy className="h-4 w-4 text-amber-500" />
+                <div>
+                  <p className="text-xs font-medium text-text-primary">{r.source}</p>
+                  <p className="text-[10px] text-text-tertiary">{r.year}年</p>
+                </div>
                 {r.rank && (
-                  <span className="ml-2 font-semibold text-text-primary">第 {r.rank} 名</span>
+                  <span className="ml-auto rounded-lg bg-amber-50 px-2 py-0.5 text-sm font-bold text-amber-600 dark:bg-amber-500/10 dark:text-amber-400">
+                    #{r.rank}
+                  </span>
                 )}
               </div>
             ))}
@@ -531,28 +626,60 @@ function DetailPanel({ data }: {
         </div>
       )}
 
-      {/* 学科评估 */}
+      {/* ── National Specialties ── */}
+      {uni.national_specialties && uni.national_specialties.length > 0 && (
+        <div>
+          <h4 className="mb-2.5 text-sm font-semibold text-text-primary">国家特色专业</h4>
+          <div className="flex flex-wrap gap-1.5">
+            {uni.national_specialties.map((s) => (
+              <span key={s} className="rounded-lg border border-blue/20 bg-blue/[0.04] px-2.5 py-1 text-xs font-medium text-blue">
+                {s}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Discipline Evaluations ── */}
       {disciplineEvaluations.length > 0 && (
         <div>
-          <h4 className="mb-2 text-xs font-medium text-text-secondary">学科评估（{disciplineEvaluations.length} 项）</h4>
+          <h4 className="mb-2.5 text-sm font-semibold text-text-primary">
+            学科评估
+            <span className="ml-1.5 text-xs font-normal text-text-tertiary">（{disciplineEvaluations.length} 项）</span>
+          </h4>
           <div className="flex flex-wrap gap-1.5">
-            {disciplineEvaluations.slice(0, 12).map((d) => (
+            {disciplineEvaluations.slice(0, 15).map((d) => (
               <span
                 key={d.id}
                 className={[
-                  'rounded-md px-2 py-1 text-xs font-medium',
+                  'rounded-lg px-2.5 py-1 text-xs font-medium',
                   getRatingColor(d.rating),
                 ].join(' ')}
               >
-                {d.discipline_name} {d.rating}
+                {d.discipline_name}
+                <span className="ml-1 font-bold">{d.rating}</span>
               </span>
             ))}
-            {disciplineEvaluations.length > 12 && (
-              <span className="rounded-md px-2 py-1 text-xs text-text-tertiary">
-                +{disciplineEvaluations.length - 12} 项
+            {disciplineEvaluations.length > 15 && (
+              <span className="rounded-lg px-2.5 py-1 text-xs text-text-tertiary">
+                +{disciplineEvaluations.length - 15} 项
               </span>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── Contact ── */}
+      {uni.admission_phone && (
+        <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-3">
+          <Phone className="h-4 w-4 text-text-tertiary" />
+          <span className="text-xs text-text-secondary">招办电话：</span>
+          <a
+            href={`tel:${uni.admission_phone}`}
+            className="text-xs font-medium text-blue hover:underline"
+          >
+            {uni.admission_phone}
+          </a>
         </div>
       )}
     </div>
@@ -563,14 +690,16 @@ function DetailPanel({ data }: {
 // 工具组件
 // ─────────────────────────────────────────────────────────────────────────────
 
-function InfoItem({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="flex items-start gap-2">
-      <span className="mt-0.5 text-text-tertiary">{icon}</span>
-      <div>
-        <p className="text-[10px] text-text-tertiary">{label}</p>
-        <p className="text-xs text-text-primary">{value}</p>
+    <div className="rounded-xl border border-border bg-surface p-3">
+      <div className="mb-1.5 flex items-center gap-2">
+        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue/10 text-blue">
+          {icon}
+        </div>
+        <span className="text-[10px] font-medium text-text-tertiary">{label}</span>
       </div>
+      <p className="text-sm font-bold text-text-primary">{value}</p>
     </div>
   );
 }

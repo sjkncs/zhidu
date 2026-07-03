@@ -10,6 +10,7 @@ import { createRAGService } from '@zhidu/ai/rag-service';
 import { createLLMService } from '@zhidu/ai/llm-service';
 import { StructuredQueryAgent } from '@zhidu/ai/structured-query-agent';
 import { SupabaseQueryExecutor } from '@zhidu/ai/supabase-query-executor';
+import { gatherUserContext } from '@zhidu/ai/user-context-gatherer';
 import { createChatSession, batchCreateChatMessages } from '@zhidu/db/repository';
 import { requireUser, authErrorResponse } from '@/lib/auth-utils';
 import { checkRateLimit, getRateLimitKey, rateLimitResponse, AI_CHAT_LIMIT } from '@/lib/rate-limit';
@@ -37,7 +38,10 @@ export async function POST(request: NextRequest) {
       taskType = 'KNOWLEDGE_QA',
       stream = false,
       sessionId: inputSessionId,
+      preferMode,
     } = body;
+
+    const isFreeChat = preferMode === 'freechat';
 
     if (!query || typeof query !== 'string') {
       return NextResponse.json(
@@ -67,9 +71,9 @@ export async function POST(request: NextRequest) {
     const rag = createRAGService({ db: supabase as any, llm });
 
     // ─── 结构化数据预查询（Phase 15d）───
-    // 尝试将用户问题解析为结构化查询，如果有结果则注入为额外上下文
+    // 自由对话模式下跳过所有数据库查询
     let structuredContext = '';
-    try {
+    if (!isFreeChat) try {
       const executor = new SupabaseQueryExecutor(supabase as any);
       const agent = new StructuredQueryAgent(llm, executor);
       const result = await agent.query(query);
@@ -98,39 +102,86 @@ export async function POST(request: NextRequest) {
     }
 
     // ─── 直接大学知识增强（大学名检测 + 学科评估 + 排名）───
-    // 当用户提及具体大学名时，始终查表补充详细信息（不受 structuredContext 短路）
-    try {
+    if (!isFreeChat) try {
       const enriched = await enrichUniversityContext(supabase as any, query);
       if (enriched) structuredContext += enriched;
     } catch (err) {
       console.warn('[Chat] University context enrichment failed:', err);
     }
 
+    // ─── 跨模块用户数据收集 ───
+    let userContext = '';
+    try {
+      userContext = await gatherUserContext(auth.user.id, query, supabase as any);
+    } catch (err) {
+      console.warn('[Chat] User context gathering failed:', err);
+    }
+
+    // ─── 结构化输出指令（深度思考 / 步骤 / 待办） ───
+    const STRUCTURED_OUTPUT_INSTRUCTIONS = `
+
+## 结构化输出格式（请严格遵守）
+
+在回答过程中，请使用以下标记来组织你的思考过程和执行步骤：
+
+1. **深度思考**：在给出最终答案之前，先用标记包裹你的推理过程：
+   <!-- type:thinking -->
+   这里写下你的分析思路、权衡考虑、推理逻辑...
+   <!-- /thinking -->
+
+2. **执行步骤**：当你需要执行多个步骤来回答问题时，用标记列出：
+   <!-- type:steps count:N -->
+   1. 第一步做什么
+   2. 第二步做什么
+   ...
+   <!-- /steps -->
+
+3. **待办事项**：如果回答中涉及用户需要后续完成的事项，用标记创建待办：
+   <!-- type:todo count:N -->
+   - [ ] 待办项1
+   - [ ] 待办项2
+   <!-- /todo -->
+
+注意：深度思考标记内的内容会对用户折叠显示，所以请在标记内写完整的思考过程。`;
+
     // ─── 流式模式 ───
     if (stream) {
-      // 先检索知识库
-      const chunks = await rag.retrieve({
-        query,
-        collections,
-        topK: 8,
-      });
+      // 自由对话模式：跳过 RAG，直接 LLM
+      let chunks: Array<{ content: string; metadata: any; score: number }> = [];
+      if (!isFreeChat) {
+        chunks = await rag.retrieve({ query, collections, topK: 8 });
+        // 过滤低相关性结果（score < 0.15 视为噪音）
+        chunks = chunks.filter(c => c.score >= 0.15);
+      }
 
-      // 构建带知识库上下文的消息
+      // 构建系统提示
       const sourcesText = chunks
         .map((c, i) => `[${i + 1}] ${c.content}\n    — 来源: ${(c.metadata as any)?.title ?? '未知'}`)
         .join('\n\n');
 
-      const systemMessage = {
-        role: 'system' as const,
-        content: `你是"知渡"平台的知识助手。请基于以下参考资料回答用户问题。
+      const systemContent = isFreeChat
+        ? `你是"知渡"平台的 AI 助手，一个面向高中生和家长的智能顾问。你能够访问用户在平台各模块的个人数据，提供个性化建议。
 
 ## 回答规则
-1. 优先使用参考资料中的信息
+1. 用专业、友善的语气回答
+2. 针对高考志愿填报、学业规划、职业发展等话题给出有深度的建议
+3. 适当使用结构化格式（标题、列表、表格）让回答更清晰
+4. 如果不确定信息，请诚实说明并建议用户查阅官方渠道
+5. 当用户数据可用时，结合用户实际情况给出个性化建议${userContext ? `\n\n${userContext}` : ''}${STRUCTURED_OUTPUT_INSTRUCTIONS}`
+        : `你是"知渡"平台的知识助手。请基于以下参考资料回答用户问题。你能够访问用户在平台各模块的个人数据。
+
+## 回答规则
+1. 优先使用参考资料中的信息，**只引用相关性高的资料**，不要强行引用不相关的内容
 2. 在回答中用 [1]、[2] 等标注引用来源
-3. 如果参考资料不足，请明确说明
+3. 如果参考资料不足以回答问题，请明确说明，**不要编造引用**
+4. 当用户数据可用时，结合用户实际情况给出个性化建议
 
 ## 参考资料
-${sourcesText || '（暂无相关参考资料）'}${structuredContext}`,
+${sourcesText || '（暂无相关参考资料）'}${structuredContext}${userContext ? `\n\n${userContext}` : ''}${STRUCTURED_OUTPUT_INSTRUCTIONS}`;
+
+      const systemMessage = {
+        role: 'system' as const,
+        content: systemContent,
       };
 
       const messages = [
@@ -141,7 +192,7 @@ ${sourcesText || '（暂无相关参考资料）'}${structuredContext}`,
 
       const llmStream = llm.chatStream({
         messages,
-        options: { temperature: 0.6, maxTokens: 2048 },
+        options: { temperature: 0.7, maxTokens: 2048 },
       });
 
       const encoder = new TextEncoder();
@@ -211,12 +262,30 @@ ${sourcesText || '（暂无相关参考资料）'}${structuredContext}`,
     }
 
     // ─── 同步模式 ───
-    const chatContextText = chatContext?.map((m: any) => `${m.role}: ${m.content}`).join('\n');
-    const { content, sources } = await rag.retrieveAndGenerate({
-      query,
-      collections,
-      context: [chatContextText, structuredContext].filter(Boolean).join('\n'),
-    });
+    let content: string;
+    let sources: Array<{ content: string; metadata: any; score: number }> = [];
+
+    if (isFreeChat) {
+      // 自由对话：直接 LLM（含结构化输出指令 + 用户数据上下文）
+      const syncSystemPrompt = `你是"知渡"平台的 AI 助手，一个面向高中生和家长的智能顾问。用专业、友善的语气回答。${userContext ? `\n\n${userContext}` : ''}${STRUCTURED_OUTPUT_INSTRUCTIONS}`;
+      content = await llm.chat({
+        messages: [
+          { role: 'system', content: syncSystemPrompt },
+          ...(chatContext ?? []).map((m: any) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+          { role: 'user' as const, content: query },
+        ],
+        options: { temperature: 0.7, maxTokens: 2048 },
+      });
+    } else {
+      const chatContextText = chatContext?.map((m: any) => `${m.role}: ${m.content}`).join('\n');
+      const result = await rag.retrieveAndGenerate({
+        query,
+        collections,
+        context: [chatContextText, structuredContext].filter(Boolean).join('\n'),
+      });
+      content = result.content;
+      sources = result.sources;
+    }
 
     // Persist synchronous messages
     if (sessionId) {
