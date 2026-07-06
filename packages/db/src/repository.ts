@@ -157,3 +157,16 @@ export {
   markAllNotificationsRead,
   createNotification,
 } from './repos/notifications';
+
+export {
+  getActivePlans,
+  getUserSubscription,
+  getUserCredits,
+  getUserUsageLogs,
+  createOrder,
+  getUserOrders,
+  getOrderById,
+  completeOrder,
+  getUsageSummary,
+  getMonthlyUsageStats,
+} from './repos/billing';

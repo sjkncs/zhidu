@@ -22,6 +22,8 @@ import {
   StickyNote,
   Clock,
   Wallet,
+  CreditCard,
+  ShoppingBag,
   Sun,
   Moon,
   Menu,
@@ -54,6 +56,8 @@ const navItems: NavItem[] = [
   { icon: StickyNote, label: '备忘', href: '/dashboard/memo' },
   { icon: Clock, label: '时间', href: '/dashboard/time' },
   { icon: Wallet, label: '财务', href: '/dashboard/finance' },
+  { icon: CreditCard, label: '账单中心', href: '/dashboard/billing' },
+  { icon: ShoppingBag, label: '订单记录', href: '/dashboard/orders' },
 ];
 
 function Sidebar({
@@ -204,6 +208,8 @@ function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
       memo: '备忘',
       time: '时间',
       finance: '财务',
+      billing: '账单中心',
+      orders: '订单记录',
     };
     return {
       href,
