@@ -229,7 +229,7 @@ export default function OrdersPage() {
   const statusParam = currentFilter?.apiValue || '';
 
   const fetchOrders = useCallback(
-    async (signal: AbortSignal) => {
+    async () => {
       setLoading(true);
       setError(null);
       try {
@@ -240,7 +240,7 @@ export default function OrdersPage() {
           params.set('status', statusParam);
         }
 
-        const res = await fetch(`/api/billing/orders?${params.toString()}`, { signal });
+        const res = await fetch(`/api/billing/orders?${params.toString()}`);
         if (!res.ok) {
           const body = await res.json().catch(() => null);
           throw new Error(body?.error || `获取订单列表失败 (${res.status})`);
@@ -249,20 +249,17 @@ export default function OrdersPage() {
         setOrders(json.data ?? []);
         setTotal(json.total ?? 0);
       } catch (err) {
-        if (signal.aborted) return;
         const msg = err instanceof Error ? err.message : '加载订单数据失败';
         setError(msg);
       } finally {
-        if (!signal.aborted) setLoading(false);
+        setLoading(false);
       }
     },
     [page, statusParam],
   );
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetchOrders(controller.signal);
-    return () => controller.abort();
+    fetchOrders();
   }, [fetchOrders]);
 
   const handleTabChange = useCallback((tabKey: string) => {
@@ -276,8 +273,7 @@ export default function OrdersPage() {
   }, []);
 
   const handleRetry = useCallback(() => {
-    const controller = new AbortController();
-    fetchOrders(controller.signal);
+    fetchOrders();
   }, [fetchOrders]);
 
   return (

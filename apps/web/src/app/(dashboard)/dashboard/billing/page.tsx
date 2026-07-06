@@ -469,11 +469,11 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchOverview = useCallback(async (signal: AbortSignal) => {
+  const fetchOverview = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/billing/overview', { signal });
+      const res = await fetch('/api/billing/overview');
       if (!res.ok) {
         const body = await res.json().catch(() => null);
         throw new Error(body?.error || `获取账单概览失败 (${res.status})`);
@@ -481,23 +481,19 @@ export default function BillingPage() {
       const json = await res.json();
       setData(json.data ?? json);
     } catch (err) {
-      if (signal.aborted) return;
       const msg = err instanceof Error ? err.message : '加载账单数据失败';
       setError(msg);
     } finally {
-      if (!signal.aborted) setLoading(false);
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetchOverview(controller.signal);
-    return () => controller.abort();
+    fetchOverview();
   }, [fetchOverview]);
 
   const handleRetry = useCallback(() => {
-    const controller = new AbortController();
-    fetchOverview(controller.signal);
+    fetchOverview();
   }, [fetchOverview]);
 
   // Loading state

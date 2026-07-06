@@ -384,11 +384,11 @@ export default function LlmPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchStatus = useCallback(async (signal: AbortSignal) => {
+  const fetchStatus = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/billing/llm-status', { signal });
+      const res = await fetch('/api/billing/llm-status');
       if (!res.ok) {
         const body = await res.json().catch(() => null);
         throw new Error(body?.error || `获取 LLM 状态失败 (${res.status})`);
@@ -396,23 +396,19 @@ export default function LlmPage() {
       const json = await res.json();
       setData(json.data ?? json);
     } catch (err) {
-      if (signal.aborted) return;
       const msg = err instanceof Error ? err.message : '加载 LLM 数据失败';
       setError(msg);
     } finally {
-      if (!signal.aborted) setLoading(false);
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetchStatus(controller.signal);
-    return () => controller.abort();
+    fetchStatus();
   }, [fetchStatus]);
 
   const handleRetry = useCallback(() => {
-    const controller = new AbortController();
-    fetchStatus(controller.signal);
+    fetchStatus();
   }, [fetchStatus]);
 
   // Loading state
