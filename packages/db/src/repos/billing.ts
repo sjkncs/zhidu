@@ -559,3 +559,65 @@ export async function getMonthlyUsageStats(
     return [];
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Credit Deduction (calls deduct_ai_credits SQL function)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 扣减 AI 额度（调用数据库函数 deduct_ai_credits）
+ * @returns true=扣减成功, false=余额不足
+ */
+export async function deductCredits(
+  userId: string,
+  credits: number,
+  module: string,
+  action: string,
+  options?: {
+    tokensIn?: number;
+    tokensOut?: number;
+    model?: string;
+    durationMs?: number;
+    metadata?: Record<string, unknown>;
+  },
+): Promise<boolean> {
+  try {
+    const { data, error } = await getDb().rpc('deduct_ai_credits', {
+      p_user_id: userId,
+      p_credits: credits,
+      p_module: module,
+      p_action: action,
+      p_tokens_in: options?.tokensIn ?? 0,
+      p_tokens_out: options?.tokensOut ?? 0,
+      p_model: options?.model ?? null,
+      p_duration: options?.durationMs ?? null,
+      p_metadata: options?.metadata ?? {},
+    });
+    if (error) {
+      console.error('[deductCredits]', error.message);
+      return false;
+    }
+    return data === true;
+  } catch (err) {
+    console.error('[deductCredits]', err);
+    return false;
+  }
+}
+
+/**
+ * 检查用户可用额度（不扣减）
+ */
+export async function getAvailableCredits(userId: string): Promise<number> {
+  try {
+    const credits = await getUserCredits(userId);
+    if (!credits) return 0;
+    return (
+      credits.freeCredits +
+      credits.purchasedCredits +
+      credits.bonusCredits +
+      Math.max(0, credits.monthlyQuota - credits.monthlyUsed)
+    );
+  } catch {
+    return 0;
+  }
+}

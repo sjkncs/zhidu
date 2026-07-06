@@ -169,4 +169,6 @@ export {
   completeOrder,
   getUsageSummary,
   getMonthlyUsageStats,
+  deductCredits,
+  getAvailableCredits,
 } from './repos/billing';
