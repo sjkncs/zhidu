@@ -263,12 +263,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ error: null });
   },
 
-  /** 更新指定消息的内容（本地状态更新） */
+  /** 更新指定消息的内容（乐观更新 + 后台持久化） */
   updateMessage: (id: string, content: string) => {
+    // 先更新本地状态
     set((state) => ({
       messages: state.messages.map((m) =>
         m.id === id ? { ...m, content } : m,
       ),
     }));
+
+    // 后台持久化到数据库
+    fetch(`/api/ai/chat/messages/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    }).catch((err) => {
+      console.warn('[chat-store] Failed to persist message edit:', err);
+    });
   },
 }));
