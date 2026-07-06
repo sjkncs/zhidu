@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { useAuthStore } from '@/stores/auth-store';
 import {
@@ -27,6 +27,8 @@ import {
   Sun,
   Moon,
   Menu,
+  LogOut,
+  User,
 } from 'lucide-react';
 import { NotificationBell } from '@/components/NotificationBell';
 
@@ -68,6 +70,7 @@ function Sidebar({
   onClose: () => void;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const user = useAuthStore((s) => s.user);
 
   const userEmail = user?.email ?? '未登录';
@@ -138,17 +141,25 @@ function Sidebar({
 
         {/* User section */}
         <div className="border-t border-border px-4 py-4">
-          <div className="flex items-center gap-3">
+          <Link href="/dashboard/profile" onClick={onClose} className="flex items-center gap-3 mb-3 group">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-navy-light text-sm font-semibold text-white">
               {userInitial}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-text-primary">
+              <p className="truncate text-sm font-medium text-text-primary group-hover:text-blue transition-colors">
                 {userEmail}
               </p>
               <p className="text-xs text-text-tertiary">个人中心</p>
             </div>
-          </div>
+            <User className="h-4 w-4 text-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />
+          </Link>
+          <button
+            onClick={() => { useAuthStore.getState().signOut(); router.push('/login'); }}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-secondary hover:bg-surface-elevated hover:text-red-500 transition-colors"
+          >
+            <LogOut className="h-4 w-4" />
+            退出登录
+          </button>
         </div>
       </aside>
     </>
@@ -211,6 +222,8 @@ function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
       billing: '账单中心',
       llm: 'AI 服务管理',
       orders: '订单记录',
+      pay: '充值中心',
+      profile: '个人中心',
     };
     return {
       href,
