@@ -33,6 +33,8 @@ interface ChatState {
   loadSession: (sessionId: string) => Promise<void>;
   createNewSession: () => void;
   deleteSession: (sessionId: string) => Promise<void>;
+  /** 更新指定消息的内容（用于编辑回复） */
+  updateMessage: (id: string, content: string) => void;
 }
 
 function generateId(): string {
@@ -259,5 +261,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   clearError: () => {
     set({ error: null });
+  },
+
+  /** 更新指定消息的内容（本地状态更新） */
+  updateMessage: (id: string, content: string) => {
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.id === id ? { ...m, content } : m,
+      ),
+    }));
   },
 }));

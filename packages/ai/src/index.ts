@@ -256,3 +256,7 @@ export type { MLPredictInput, MLPredictResult } from './ml-predict-client';
 
 // User context gatherer
 export { gatherUserContext } from './user-context-gatherer';
+
+// Agent framework
+export { ToolRegistry, createDefaultRegistry, Planner, Executor } from './agent';
+export type { AgentTask, AgentStep, AgentPlan, ToolHandler, ToolDefinition } from './agent';

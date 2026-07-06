@@ -6,3 +6,4 @@ export { SourcePanel } from './SourceCard';
 export { ChatInput } from './ChatInput';
 export { TypingIndicator } from './TypingIndicator';
 export { ChatSessionList } from './ChatSessionList';
+export { EditPanel } from './EditPanel';

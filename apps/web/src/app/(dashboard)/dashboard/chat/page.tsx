@@ -1,13 +1,15 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useChatStore } from '@/stores/chat-store';
+import type { ChatMessage } from '@/stores/chat-store';
 import {
   ChatWelcome,
   MessageBubble,
   ChatInput,
   TypingIndicator,
   ChatSessionList,
+  EditPanel,
 } from '@/components/chat';
 import { Trash2, AlertCircle, X } from 'lucide-react';
 
@@ -19,6 +21,10 @@ export default function ChatPage() {
   const clearMessages = useChatStore((s) => s.clearMessages);
   const clearError = useChatStore((s) => s.clearError);
   const fetchSessions = useChatStore((s) => s.fetchSessions);
+  const updateMessage = useChatStore((s) => s.updateMessage);
+
+  // 编辑面板状态
+  const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -103,7 +109,11 @@ export default function ChatPage() {
           ) : (
             <div className="mx-auto flex max-w-3xl flex-col gap-4 py-6">
               {messages.map((msg) => (
-                <MessageBubble key={msg.id} message={msg} />
+                <MessageBubble
+                  key={msg.id}
+                  message={msg}
+                  onEdit={(m) => setEditingMessage(m)}
+                />
               ))}
 
               {showTypingIndicator && <TypingIndicator />}
@@ -119,6 +129,18 @@ export default function ChatPage() {
           isStreaming={isStreaming}
         />
       </div>
+
+      {/* 编辑面板 */}
+      {editingMessage && (
+        <EditPanel
+          message={editingMessage}
+          onSave={(id, newContent) => {
+            updateMessage(id, newContent);
+            setEditingMessage(null);
+          }}
+          onClose={() => setEditingMessage(null)}
+        />
+      )}
     </div>
   );
 }

@@ -55,7 +55,7 @@ interface Collection {
 }
 
 interface ModeOption {
-  key: SearchMode;
+  key: string;
   label: string;
 }
 
@@ -65,8 +65,8 @@ interface ModeOption {
 
 const modeOptions: ModeOption[] = [
   { key: 'all', label: '全部' },
-  { key: 'structured', label: '仅院校' },
-  { key: 'structured', label: '仅专业' },
+  { key: 'university', label: '仅院校' },
+  { key: 'major', label: '仅专业' },
   { key: 'knowledge', label: '仅知识' },
 ];
 
