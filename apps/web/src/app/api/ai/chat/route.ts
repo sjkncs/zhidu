@@ -11,7 +11,7 @@ import { createLLMService } from '@zhidu/ai/llm-service';
 import { StructuredQueryAgent } from '@zhidu/ai/structured-query-agent';
 import { SupabaseQueryExecutor } from '@zhidu/ai/supabase-query-executor';
 import { gatherUserContext } from '@zhidu/ai/user-context-gatherer';
-import { createChatSession, batchCreateChatMessages } from '@zhidu/db/repository';
+import { createChatSession, batchCreateChatMessages, deductCredits, getAvailableCredits } from '@zhidu/db/repository';
 import { requireUser, authErrorResponse } from '@/lib/auth-utils';
 import { checkRateLimit, getRateLimitKey, rateLimitResponse, AI_CHAT_LIMIT } from '@/lib/rate-limit';
 
@@ -55,6 +55,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: '问题过长，最多 2000 个字符' },
         { status: 400 },
+      );
+    }
+
+    // ─── AI 额度检查 ───
+    const availableCredits = await getAvailableCredits(auth.user.id);
+    if (availableCredits <= 0) {
+      return NextResponse.json(
+        { error: 'AI 额度不足，请充值后再使用', code: 'INSUFFICIENT_CREDITS' },
+        { status: 402 },
       );
     }
 
@@ -241,6 +250,13 @@ ${sourcesText || '（暂无相关参考资料）'}${structuredContext}${userCont
                 { role: 'assistant', content: fullContent, sources: sourcesPayload, taskType },
               ]);
             }
+
+            // Deduct AI credits (1 credit per chat)
+            await deductCredits(auth.user.id, 1, 'chat', 'chat_message', {
+              tokensOut: fullContent.length,
+              model: preferMode === 'freechat' ? 'deepseek-v4-pro' : 'deepseek-v4-pro',
+              metadata: { sessionId: persistSessionId, taskType, mode: preferMode ?? 'auto' },
+            });
           } catch (err) {
             console.error('[Chat Stream] error:', err);
             controller.enqueue(
@@ -299,6 +315,13 @@ ${sourcesText || '（暂无相关参考资料）'}${structuredContext}${userCont
         { role: 'assistant', content, sources: sourcesPayload, taskType },
       ]);
     }
+
+    // Deduct AI credits (1 credit per chat)
+    await deductCredits(auth.user.id, 1, 'chat', 'chat_message', {
+      tokensOut: content?.length ?? 0,
+      model: 'deepseek-v4-pro',
+      metadata: { sessionId, taskType, mode: preferMode ?? 'auto', sync: true },
+    });
 
     return NextResponse.json({
       success: true,

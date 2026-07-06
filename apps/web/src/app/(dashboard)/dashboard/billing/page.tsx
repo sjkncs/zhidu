@@ -13,6 +13,7 @@ import {
   Zap,
   ArrowRight,
   Check,
+  Cpu,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -555,14 +556,24 @@ export default function BillingPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       {/* Page header */}
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue/10">
-          <CreditCard className="h-5 w-5 text-blue" />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue/10">
+            <CreditCard className="h-5 w-5 text-blue" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-text-primary">账单中心</h1>
+            <p className="text-sm text-text-secondary">管理订阅、额度与订单</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-xl font-bold text-text-primary">账单中心</h1>
-          <p className="text-sm text-text-secondary">管理订阅、额度与订单</p>
-        </div>
+        <a
+          href="/dashboard/billing/llm"
+          className="flex items-center gap-2 rounded-lg border border-border bg-surface-elevated px-4 py-2 text-sm font-medium text-text-secondary transition hover:border-blue/30 hover:text-blue"
+        >
+          <Cpu className="h-4 w-4" />
+          AI 服务管理
+          <ArrowRight className="h-3.5 w-3.5" />
+        </a>
       </div>
 
       {/* Error banner (when data is also available) */}

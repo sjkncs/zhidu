@@ -209,6 +209,7 @@ function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
       time: '时间',
       finance: '财务',
       billing: '账单中心',
+      llm: 'AI 服务管理',
       orders: '订单记录',
     };
     return {
