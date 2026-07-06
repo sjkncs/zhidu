@@ -108,7 +108,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-navy text-sm font-bold text-white">
-              智
+              知
             </div>
             <span className="text-xl font-bold text-navy">知渡</span>
           </div>
@@ -166,7 +166,7 @@ export default function Home() {
 
             <p className="mb-10 text-lg leading-relaxed text-text-secondary md:text-xl">
               知渡是你的 AI 个人成长操作系统。从志愿填报到大学毕业，
-              智能匹配、全程陪伴、精准规划每一步。
+              知能匹配、全程陪伴、精准规划每一步。
             </p>
 
             <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
@@ -311,10 +311,10 @@ export default function Home() {
           <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
             <div className="flex items-center gap-2">
               <div className="flex h-7 w-7 items-center justify-center rounded-md bg-navy text-xs font-bold text-white">
-                智
+                知
               </div>
               <span className="text-lg font-bold text-navy">知渡</span>
-              <span className="text-sm text-text-tertiary">© 2025</span>
+              <span className="text-sm text-text-tertiary">© 2026</span>
             </div>
             <div className="flex gap-8 text-sm text-text-secondary">
               <Link href="/privacy" className="transition hover:text-navy">
@@ -323,7 +323,7 @@ export default function Home() {
               <Link href="/terms" className="transition hover:text-navy">
                 服务条款
               </Link>
-              <a href="#" className="transition hover:text-navy">
+              <a href="mailto:zhiwaisong@gmail.com" className="transition hover:text-navy">
                 联系我们
               </a>
             </div>

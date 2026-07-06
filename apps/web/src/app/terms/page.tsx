@@ -36,7 +36,7 @@ const sections = [
   {
     title: '六、联系方式',
     content:
-      '如您对本服务条款有任何疑问或建议，请通过平台内的反馈功能或发送邮件至 support@zhidu.ai 与我们联系。我们将在合理期限内回复您的咨询。',
+      '如您对本服务条款有任何疑问或建议，请通过平台内的反馈功能或发送邮件至 zhiwaisong@gmail.com 与我们联系。我们将在合理期限内回复您的咨询。',
   },
 ];
 
@@ -54,7 +54,7 @@ export default function TermsPage() {
           </Link>
           <div className="flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-navy text-xs font-bold text-white">
-              智
+              知
             </div>
             <span className="text-lg font-bold text-navy">知渡</span>
           </div>
@@ -64,7 +64,7 @@ export default function TermsPage() {
       <main className="mx-auto max-w-3xl px-6 py-12 md:py-16">
         <h1 className="mb-2 text-3xl font-bold text-text-primary">服务条款</h1>
         <p className="mb-10 text-sm text-text-tertiary">
-          最后更新日期：2025 年 1 月 1 日
+          最后更新日期：2026 年 7 月 1 日
         </p>
 
         <div className="flex flex-col gap-8">
@@ -84,7 +84,7 @@ export default function TermsPage() {
       <footer className="border-t border-border bg-surface">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-6">
           <span className="text-sm text-text-tertiary">
-            &copy; 2025 知渡
+            &copy; 2026 知渡
           </span>
           <div className="flex gap-6 text-sm text-text-secondary">
             <Link href="/privacy" className="transition hover:text-text-primary">
