@@ -606,16 +606,41 @@ export async function deductCredits(
 
 /**
  * 检查用户可用额度（不扣减）
+ * 若用户无额度记录，自动创建免费套餐额度（50 free + 50 monthly）
  */
 export async function getAvailableCredits(userId: string): Promise<number> {
   try {
-    const credits = await getUserCredits(userId);
-    if (!credits) return 0;
+    let credits = await getUserCredits(userId);
+
+    // 已有用户可能没有 credits 行（注册触发器仅对新用户生效）
+    if (!credits) {
+      const { data: inserted, error } = await getDb()
+        .from('ai_credits')
+        .insert({
+          user_id: userId,
+          free_credits: 50,
+          total_credits: 50,
+          monthly_quota: 50,
+          monthly_used: 0,
+          purchased_credits: 0,
+          bonus_credits: 0,
+          used_credits: 0,
+        })
+        .select()
+        .single();
+      if (error) {
+        // 并发插入冲突时重新读取
+        credits = await getUserCredits(userId);
+        if (!credits) return 0;
+      } else {
+        credits = mapAiCredits(inserted);
+      }
+    }
+
     return (
       credits.freeCredits +
       credits.purchasedCredits +
-      credits.bonusCredits +
-      Math.max(0, credits.monthlyQuota - credits.monthlyUsed)
+      credits.bonusCredits
     );
   } catch {
     return 0;

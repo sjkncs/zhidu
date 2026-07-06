@@ -295,7 +295,6 @@ RETURNS BOOLEAN AS $$
 DECLARE
   v_row RECORD;
   v_remaining INTEGER;
-  v_monthly_deduct INTEGER;
   v_free_deduct INTEGER;
   v_purchased_deduct INTEGER;
   v_bonus_deduct INTEGER;
@@ -308,9 +307,8 @@ BEGIN
     RETURN FALSE;
   END IF;
 
-  -- 总可用额度
-  v_remaining := GREATEST(0, v_row.monthly_quota - v_row.monthly_used)
-               + v_row.free_credits
+  -- 总可用额度（free+purchased+bonus，monthly_used 仅为计数器）
+  v_remaining := v_row.free_credits
                + v_row.purchased_credits
                + v_row.bonus_credits;
 
@@ -318,12 +316,10 @@ BEGIN
     RETURN FALSE;
   END IF;
 
-  -- 按优先级逐级扣减：月度 → 免费 → 购买 → 赠送
-  v_monthly_deduct := LEAST(p_credits, GREATEST(0, v_row.monthly_quota - v_row.monthly_used));
-  v_remaining := p_credits - v_monthly_deduct;
-
-  v_free_deduct := LEAST(v_remaining, v_row.free_credits);
-  v_remaining := v_remaining - v_free_deduct;
+  -- 按优先级逐级扣减：免费(月度) → 购买 → 赠送
+  -- free_credits 和 monthly_used 同步：free_credits 是余额，monthly_used 是计数器
+  v_free_deduct := LEAST(p_credits, v_row.free_credits);
+  v_remaining := p_credits - v_free_deduct;
 
   v_purchased_deduct := LEAST(v_remaining, v_row.purchased_credits);
   v_remaining := v_remaining - v_purchased_deduct;
@@ -331,10 +327,10 @@ BEGIN
   v_bonus_deduct := LEAST(v_remaining, v_row.bonus_credits);
 
   UPDATE ai_credits SET
-    monthly_used = monthly_used + v_monthly_deduct,
     free_credits = free_credits - v_free_deduct,
     purchased_credits = purchased_credits - v_purchased_deduct,
     bonus_credits = bonus_credits - v_bonus_deduct,
+    monthly_used = monthly_used + v_free_deduct,
     used_credits = used_credits + p_credits,
     updated_at = NOW()
   WHERE user_id = p_user_id;
