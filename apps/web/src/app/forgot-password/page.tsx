@@ -78,8 +78,8 @@ export default function ForgotPasswordPage() {
         <div className="rounded-2xl border border-border bg-surface p-8 shadow-sm">
           {isSubmitted ? (
             <div className="text-center">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-green-100">
-                <CheckCircle className="h-7 w-7 text-green-600" />
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-green-500/10">
+                <CheckCircle className="h-7 w-7 text-green-500" />
               </div>
               <h2 className="mb-2 text-lg font-semibold text-text-primary">
                 邮件已发送
@@ -112,7 +112,7 @@ export default function ForgotPasswordPage() {
               </div>
 
               {error && (
-                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
                   {error}
                 </div>
               )}

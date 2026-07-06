@@ -69,7 +69,7 @@ export default function LoginPage() {
         </h2>
 
         {error && (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
             {error}
           </div>
         )}
@@ -97,7 +97,7 @@ export default function LoginPage() {
             <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer select-none">
               <input
                 type="checkbox"
-                className="h-4 w-4 rounded border-gray-300 text-blue accent-blue"
+                className="h-4 w-4 rounded border-border text-blue accent-blue"
               />
               记住我
             </label>

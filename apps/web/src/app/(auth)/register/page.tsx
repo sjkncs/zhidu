@@ -80,7 +80,7 @@ export default function RegisterPage() {
   };
 
   const selectClass =
-    'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-text-primary transition-colors focus:border-blue focus:outline-none focus:ring-2 focus:ring-blue/20 focus:ring-offset-1';
+    'w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary transition-colors focus:border-blue focus:outline-none focus:ring-2 focus:ring-blue/20 focus:ring-offset-1 focus:ring-offset-surface';
 
   return (
     <div className="w-full max-w-md">
@@ -102,7 +102,7 @@ export default function RegisterPage() {
         </h2>
 
         {error && (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
             {error}
           </div>
         )}
@@ -137,16 +137,16 @@ export default function RegisterPage() {
 
           {/* Province select */}
           <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-sm font-medium text-text-secondary">
               所在省份
             </label>
             <select
               className={selectClass}
               {...register('province')}
             >
-              <option value="">请选择省份</option>
+              <option value="" className="bg-surface text-text-primary">请选择省份</option>
               {provinces.map((p) => (
-                <option key={p} value={p}>
+                <option key={p} value={p} className="bg-surface text-text-primary">
                   {p}
                 </option>
               ))}
@@ -158,16 +158,16 @@ export default function RegisterPage() {
 
           {/* Grade select */}
           <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-sm font-medium text-text-secondary">
               当前年级
             </label>
             <select
               className={selectClass}
               {...register('grade')}
             >
-              <option value="">请选择年级</option>
+              <option value="" className="bg-surface text-text-primary">请选择年级</option>
               {grades.map((g) => (
-                <option key={g.value} value={g.value}>
+                <option key={g.value} value={g.value} className="bg-surface text-text-primary">
                   {g.label}
                 </option>
               ))}
