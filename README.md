@@ -62,7 +62,7 @@
 | **知识库** — Markdown 笔记、语义搜索(pgvector)、RAG 问答 | **简历中心** — 多版本管理、AI 润色、JD 匹配打分 |
 | **实习管理** — 申请追踪、AI 面试模拟、实习复盘 | **科研管理** — 论文笔记、AI 摘要、发表追踪 |
 | **时间管理** — 日程/待办、番茄钟、AI 周回顾 | **日记与情绪** — 情绪追踪、AI 成长洞察、时间轴回顾 |
-| **财富管理** — 收支记账、预算设定、AI 消费洞察 | **9 大企业模块** — 数据平台/财务/品牌/运营/战略/客服/供应链/用户运营/信息中心 |
+| **财富管理** — 收支记账、预算设定、AI 消费洞察 | **商家后台** — 数据平台/财务/品牌/运营/战略/客服/供应链/用户运营/信息中心 |
 
 </div>
 
@@ -181,13 +181,23 @@ npx supabase db push
 
 <br/>
 
-## 模块架构
+## 用户端模块架构
 
-知渡将所有功能模块分为四层，按优先级递进：
+知渡用户端将所有功能模块分为三层，按优先级递进：
 
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/sjkncs/zhidu/master/docs/images/module-architecture.png" width="800" alt="Four-Layer Module Architecture" />
+<img src="https://raw.githubusercontent.com/sjkncs/zhidu/master/docs/images/module-architecture.png" width="800" alt="Three-Layer User-Side Module Architecture" />
+
+</div>
+
+## 商家后台架构
+
+企业管理模块独立于用户端，运行在商家后台，包含 9 大业务模块：
+
+<div align="center">
+
+<img src="https://raw.githubusercontent.com/sjkncs/zhidu/master/docs/images/merchant-backend.png" width="800" alt="Merchant Backend Architecture" />
 
 </div>
 
@@ -205,7 +215,7 @@ npx supabase db push
 | 5 | 简历 + 实习 + 科研 | 简历编辑 + AI 润色 + 申请追踪 | **Done** |
 | 6 | 日常工具 | 日程 + 待办 + 番茄钟 + 备忘 + 日记 | **Done** |
 | 7 | 补充 + AI 助手 | 记账 + 关系记录 + 全局 AI 对话 | **Done** |
-| 8 | 企业模块 | 9 大企业管理模块（26 表 + 10 API） | **Done** |
+| 8 | 商家后台 | 9 大企业管理模块（26 表 + 10 API） | **Done** |
 | 9 | 多端 + 数据 | 桌面端增强 + PWA + 年报 + 备份 | **Planned** |
 
 <br/>
