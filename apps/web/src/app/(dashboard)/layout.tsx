@@ -29,6 +29,16 @@ import {
   Menu,
   LogOut,
   User,
+  Database,
+  BarChart3,
+  Megaphone,
+  ClipboardCheck,
+  Flag,
+  Headphones,
+  Truck,
+  Users,
+  Newspaper,
+  ChevronDown,
 } from 'lucide-react';
 import { NotificationBell } from '@/components/NotificationBell';
 
@@ -39,6 +49,7 @@ interface NavItem {
   label: string;
   href: string;
   stub?: boolean;
+  group?: string;
 }
 
 const navItems: NavItem[] = [
@@ -60,6 +71,16 @@ const navItems: NavItem[] = [
   { icon: Wallet, label: '财务', href: '/dashboard/finance' },
   { icon: CreditCard, label: '账单中心', href: '/dashboard/billing' },
   { icon: ShoppingBag, label: '订单记录', href: '/dashboard/orders' },
+  // ── 企业管理 ──
+  { icon: Database, label: '数据平台', href: '/dashboard/data-platform', group: '企业管理' },
+  { icon: BarChart3, label: '财务管理', href: '/dashboard/finance-pro', group: '企业管理' },
+  { icon: Megaphone, label: '品牌运营', href: '/dashboard/brand-ops', group: '企业管理' },
+  { icon: ClipboardCheck, label: '营运支持', href: '/dashboard/ops-support', group: '企业管理' },
+  { icon: Flag, label: '战略中心', href: '/dashboard/strategy', group: '企业管理' },
+  { icon: Headphones, label: '客服中心', href: '/dashboard/support', group: '企业管理' },
+  { icon: Truck, label: '供应链', href: '/dashboard/supply-chain', group: '企业管理' },
+  { icon: Users, label: '用户运营', href: '/dashboard/user-ops', group: '企业管理' },
+  { icon: Newspaper, label: '信息中心', href: '/dashboard/info-center', group: '企业管理' },
 ];
 
 function Sidebar({
@@ -105,16 +126,25 @@ function Sidebar({
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="flex flex-col gap-1">
-            {navItems.map((item) => {
+            {navItems.map((item, index) => {
               const isActive =
                 item.href === '/dashboard'
                   ? pathname === '/dashboard'
                   : pathname.startsWith(item.href);
 
               const Icon = item.icon;
+              const showGroupHeader = item.group && (!index || navItems[index - 1].group !== item.group);
 
               return (
                 <li key={item.href}>
+                  {showGroupHeader && (
+                    <div className="mt-4 mb-2 flex items-center gap-2 px-3">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                        {item.group}
+                      </span>
+                      <div className="h-px flex-1 bg-border" />
+                    </div>
+                  )}
                   <Link
                     href={item.href}
                     onClick={onClose}
@@ -224,6 +254,15 @@ function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
       orders: '订单记录',
       pay: '充值中心',
       profile: '个人中心',
+      'data-platform': '数据平台',
+      'finance-pro': '财务管理',
+      'brand-ops': '品牌运营',
+      'ops-support': '营运支持',
+      strategy: '战略中心',
+      support: '客服中心',
+      'supply-chain': '供应链',
+      'user-ops': '用户运营',
+      'info-center': '信息中心',
     };
     return {
       href,
