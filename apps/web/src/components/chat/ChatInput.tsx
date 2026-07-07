@@ -2,7 +2,6 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { ArrowUp, Loader2, Paperclip, Mic, MicOff, Zap, BookOpen, MessageCircle, X, FileText, Image as ImageIcon } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
 
 export type ChatMode = 'auto' | 'knowledge' | 'freechat';
 
@@ -70,7 +69,7 @@ export function ChatInput({ onSend, disabled, isStreaming }: ChatInputProps) {
     setMode(MODE_ORDER[(idx + 1) % MODE_ORDER.length]);
   };
 
-  // ─── File Upload ──────────────────────────────────────
+  // ─── File Upload (server-side, bypasses Storage RLS) ─────
   const handleFileSelect = useCallback(async (files: FileList | null) => {
     if (!files) return;
 
@@ -87,33 +86,32 @@ export function ChatInput({ onSend, disabled, isStreaming }: ChatInputProps) {
 
     setAttachments((prev) => [...prev, ...newAttachments]);
 
-    // Upload each file to Supabase Storage
-    const supabase = createClient();
+    // Upload each file via server-side API (uses service role key, bypasses RLS)
     for (let i = 0; i < newAttachments.length; i++) {
       const att = newAttachments[i];
       if (att.error) continue;
 
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('未登录');
+        const formData = new FormData();
+        formData.append('file', att.file);
+        formData.append('bucket', 'chat-attachments');
 
-        const ext = att.file.name.split('.').pop() || 'bin';
-        const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
 
-        const { error: uploadError } = await supabase.storage
-          .from('chat-attachments')
-          .upload(path, att.file);
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || `上传失败 (${response.status})`);
+        }
 
-        if (uploadError) throw uploadError;
-
-        const { data: urlData } = supabase.storage
-          .from('chat-attachments')
-          .getPublicUrl(path);
+        const data = await response.json();
 
         setAttachments((prev) =>
           prev.map((a, idx) =>
             idx === attachments.length + i
-              ? { ...a, uploading: false, url: urlData.publicUrl }
+              ? { ...a, uploading: false, url: data.url }
               : a
           )
         );

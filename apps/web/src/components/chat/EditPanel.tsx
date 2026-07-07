@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { X, Save, ExternalLink, Pencil } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
 import type { ChatMessage } from '@/stores/chat-store';
 
 interface EditPanelProps {
@@ -44,7 +43,7 @@ export function EditPanel({ message, onSave, onClose }: EditPanelProps) {
 
   /**
    * 在 WPS 中打开
-   * 将当前内容上传至 Supabase Storage 临时桶，
+   * 通过服务端 API 上传至 Supabase Storage（绕过 RLS），
    * 生成签名 URL 后跳转至 WPS 在线编辑
    */
   const handleOpenInWps = useCallback(async () => {
@@ -52,33 +51,29 @@ export function EditPanel({ message, onSave, onClose }: EditPanelProps) {
     setIsOpeningWps(true);
 
     try {
-      const supabase = createClient();
-      const fileName = `edit-${message.id}-${Date.now()}.md`;
       const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+      const file = new File([blob], `edit-${message.id}-${Date.now()}.md`, {
+        type: 'text/markdown',
+      });
 
-      // 上传临时文件到 Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from('temp-edits')
-        .upload(fileName, blob, {
-          contentType: 'text/markdown',
-          upsert: true,
-        });
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('bucket', 'temp-edits');
 
-      if (uploadError) {
-        throw new Error(`上传失败: ${uploadError.message}`);
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `上传失败 (${response.status})`);
       }
 
-      // 获取签名 URL（有效期 1 小时）
-      const { data: signedData, error: signedError } = await supabase.storage
-        .from('temp-edits')
-        .createSignedUrl(fileName, 3600);
-
-      if (signedError || !signedData?.signedUrl) {
-        throw new Error(`生成链接失败: ${signedError?.message ?? '未知错误'}`);
-      }
+      const data = await response.json();
 
       // 拼接 WPS 在线编辑地址并打开
-      const wpsUrl = `https://kdocs.cn/l/new?file=${encodeURIComponent(signedData.signedUrl)}`;
+      const wpsUrl = `https://kdocs.cn/l/new?file=${encodeURIComponent(data.url)}`;
       window.open(wpsUrl, '_blank', 'noopener,noreferrer');
     } catch (err) {
       const msg = err instanceof Error ? err.message : '操作失败，请重试';
