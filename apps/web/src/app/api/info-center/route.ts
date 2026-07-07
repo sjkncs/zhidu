@@ -15,25 +15,24 @@ export async function GET() {
     const [announcementsResult, bookmarksResult, feedsResult] = await Promise.allSettled([
       // Announcements
       supabase
-        .from('announcements')
-        .select('id, title, content, priority, is_pinned, published_at')
-        .eq('is_active', true)
+        .from('ic_announcements')
+        .select('id, title, content, category, priority, is_pinned, published_at, expires_at, view_count')
+        .not('published_at', 'is', null)
         .order('published_at', { ascending: false })
         .limit(10),
 
       // User bookmarks
       supabase
-        .from('bookmarks')
-        .select('id, title, url, description, category, created_at')
+        .from('ic_bookmarks')
+        .select('id, title, url, description, category, tags, is_favorite, created_at')
         .eq('user_id', userId)
         .order('created_at', { ascending: false }),
 
       // Feed items
       supabase
-        .from('feed_items')
-        .select('id, title, summary, source_url, category, published_at')
-        .eq('user_id', userId)
-        .order('published_at', { ascending: false })
+        .from('ic_feeds')
+        .select('id, source, feed_url, title, category, last_fetched_at, is_active')
+        .order('last_fetched_at', { ascending: false })
         .limit(20),
     ]);
 
@@ -74,13 +73,15 @@ export async function POST(request: NextRequest) {
     }
 
     const { data, error } = await supabase
-      .from('bookmarks')
+      .from('ic_bookmarks')
       .insert({
         user_id: userId,
         title,
         url,
         description: description ?? null,
         category: category ?? null,
+        tags: body.tags ?? [],
+        is_favorite: body.is_favorite ?? false,
       })
       .select()
       .single();

@@ -17,23 +17,22 @@ export async function GET() {
       supabase
         .from('enterprise_overview')
         .select('*')
-        .eq('user_id', userId)
         .single(),
 
       // Recent funnel events (last 7 days)
       supabase
-        .from('funnel_events')
-        .select('id, event_type, stage, count, conversion_rate, created_at')
+        .from('uo_funnel_events')
+        .select('id, event_type, event_data, session_id, created_at')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(10),
 
       // Model performance metrics
       supabase
-        .from('model_metrics')
-        .select('id, model_name, accuracy, precision, recall, f1_score, evaluated_at')
+        .from('dp_model_registry')
+        .select('id, name, version, model_type, provider, status, metrics, updated_at')
         .eq('user_id', userId)
-        .order('evaluated_at', { ascending: false })
+        .order('updated_at', { ascending: false })
         .limit(5),
     ]);
 

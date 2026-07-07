@@ -15,17 +15,17 @@ export async function GET() {
     const [ticketsResult, faqResult] = await Promise.allSettled([
       // User's support tickets
       supabase
-        .from('support_tickets')
-        .select('id, subject, description, status, priority, category, created_at, updated_at')
+        .from('cs_tickets')
+        .select('id, title, description, status, priority, category, satisfaction, opened_at, resolved_at, created_at, updated_at')
         .eq('user_id', userId)
         .order('created_at', { ascending: false }),
 
       // FAQ items
       supabase
-        .from('faq_items')
-        .select('id, question, answer, category, sort_order')
+        .from('cs_faq')
+        .select('id, question, answer, category, tags, view_count, helpful_count')
         .eq('is_active', true)
-        .order('sort_order', { ascending: true }),
+        .order('view_count', { ascending: true }),
     ]);
 
     const tickets =
@@ -63,12 +63,12 @@ export async function POST(request: NextRequest) {
     }
 
     const { data, error } = await supabase
-      .from('support_tickets')
+      .from('cs_tickets')
       .insert({
         user_id: userId,
-        subject,
+        title: subject,
         description: description ?? null,
-        priority: priority ?? 'medium',
+        priority: priority != null ? Number(priority) : 3,
         category: category ?? 'general',
         status: 'open',
       })

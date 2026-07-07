@@ -15,24 +15,24 @@ export async function GET() {
     const [objectivesResult, milestonesResult] = await Promise.allSettled([
       // Objectives with key results (nested)
       supabase
-        .from('objectives')
+        .from('strat_objectives')
         .select(`
           id,
           title,
           description,
           status,
           progress,
-          start_date,
-          end_date,
+          objective_type,
+          quarter,
           created_at,
-          key_results (
+          strat_key_results (
             id,
             title,
-            metric,
+            metric_type,
             current_value,
             target_value,
             unit,
-            progress
+            status
           )
         `)
         .eq('user_id', userId)
@@ -40,8 +40,8 @@ export async function GET() {
 
       // Milestones
       supabase
-        .from('milestones')
-        .select('id, objective_id, title, due_date, status, completed_at, created_at')
+        .from('strat_milestones')
+        .select('id, objective_id, title, due_date, status, priority, completed_at, created_at')
         .eq('user_id', userId)
         .order('due_date', { ascending: true }),
     ]);
@@ -90,15 +90,15 @@ export async function POST(request: NextRequest) {
       }
 
       const { data, error } = await supabase
-        .from('objectives')
+        .from('strat_objectives')
         .insert({
           user_id: userId,
           title,
           description: description ?? null,
           status: 'active',
           progress: 0,
-          start_date: start_date ?? null,
-          end_date: end_date ?? null,
+          objective_type: body.objective_type ?? 'personal',
+          quarter: body.quarter ?? null,
         })
         .select()
         .single();
@@ -117,16 +117,15 @@ export async function POST(request: NextRequest) {
     }
 
     const { data, error } = await supabase
-      .from('key_results')
+      .from('strat_key_results')
       .insert({
-        user_id: userId,
         objective_id,
         title,
-        metric: metric ?? null,
+        metric_type: metric ?? 'number',
         current_value: 0,
-        target_value: target_value != null ? Number(target_value) : null,
+        target_value: target_value != null ? Number(target_value) : 100,
         unit: unit ?? null,
-        progress: 0,
+        status: 'on_track',
       })
       .select()
       .single();

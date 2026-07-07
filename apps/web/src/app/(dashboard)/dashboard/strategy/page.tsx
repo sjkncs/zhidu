@@ -306,7 +306,25 @@ export default function StrategyPage() {
       const res = await fetch('/api/strategy');
       if (!res.ok) throw new Error('获取战略信息失败');
       const json = await res.json();
-      setData(json.data ?? json);
+      const raw = json.data ?? json;
+      const objectives = (raw.objectives ?? []).map((o: any) => ({
+        title: o.title,
+        keyResults: (o.strat_key_results ?? []).map((kr: any) => ({
+          title: kr.title, progress: kr.target_value > 0 ? Math.min((kr.current_value / kr.target_value) * 100, 100) : 0,
+          status: kr.status ?? 'on_track',
+        })),
+      }));
+      const milestones = (raw.milestones ?? []).map((m: any) => ({
+        title: m.title, dueDate: m.due_date ?? '', status: m.status ?? 'pending',
+      }));
+      const overallProgress = objectives.length > 0
+        ? objectives.reduce((s: number, o: any) => {
+            const krs = o.keyResults ?? [];
+            const avg = krs.length > 0 ? krs.reduce((sum: number, kr: any) => sum + kr.progress, 0) / krs.length : 0;
+            return s + avg;
+          }, 0) / objectives.length
+        : 0;
+      setData({ objectives, milestones, overallProgress });
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载数据失败');
     } finally {

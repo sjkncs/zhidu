@@ -15,25 +15,25 @@ export async function GET() {
     const [sopsResult, runsResult, kpisResult] = await Promise.allSettled([
       // SOPs
       supabase
-        .from('sops')
-        .select('id, name, description, status, version, created_at, updated_at')
+        .from('ops_sop')
+        .select('id, title, category, steps, frequency, is_active, completion_count, created_at, updated_at')
         .eq('user_id', userId)
         .order('updated_at', { ascending: false }),
 
       // Recent SOP runs
       supabase
-        .from('sop_runs')
-        .select('id, sop_id, status, started_at, completed_at, result_summary')
+        .from('ops_checklist_run')
+        .select('id, sop_id, run_date, status, results, completed_at, created_at')
         .eq('user_id', userId)
-        .order('started_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(10),
 
       // KPIs
       supabase
-        .from('kpis')
-        .select('id, name, category, value, target, unit, recorded_at')
+        .from('ops_kpi')
+        .select('id, metric_name, metric_value, target_value, unit, period, record_date, created_at')
         .eq('user_id', userId)
-        .order('recorded_at', { ascending: false })
+        .order('record_date', { ascending: false })
         .limit(20),
     ]);
 
@@ -83,13 +83,13 @@ export async function POST(request: NextRequest) {
       }
 
       const { data, error } = await supabase
-        .from('sops')
+        .from('ops_sop')
         .insert({
           user_id: userId,
-          name,
-          description: description ?? null,
-          status: 'draft',
-          version: '1.0.0',
+          title: name,
+          category: body.category ?? 'general',
+          frequency: body.frequency ?? 'once',
+          is_active: true,
         })
         .select()
         .single();
@@ -108,15 +108,15 @@ export async function POST(request: NextRequest) {
     }
 
     const { data, error } = await supabase
-      .from('kpis')
+      .from('ops_kpi')
       .insert({
         user_id: userId,
-        name,
-        category: category ?? null,
-        value: Number(value),
-        target: target != null ? Number(target) : null,
+        metric_name: name,
+        metric_value: Number(value),
+        target_value: target != null ? Number(target) : 0,
         unit: unit ?? null,
-        recorded_at: new Date().toISOString(),
+        record_date: new Date().toISOString().split('T')[0],
+        period: body.period ?? 'daily',
       })
       .select()
       .single();

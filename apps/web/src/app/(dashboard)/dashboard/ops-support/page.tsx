@@ -288,7 +288,18 @@ export default function OpsSupportPage() {
       const res = await fetch('/api/ops');
       if (!res.ok) throw new Error('获取营运支持信息失败');
       const json = await res.json();
-      setData(json.data ?? json);
+      const raw = json.data ?? json;
+      const sops = (raw.sops ?? []).map((s: any) => ({
+        title: s.title ?? '', category: s.category ?? 'general', frequency: s.frequency ?? 'once',
+        completionCount: s.completion_count ?? 0,
+      }));
+      const checklist = (raw.recentRuns ?? []).map((r: any) => ({
+        title: `SOP #${(r.sop_id ?? '').slice(0, 8)}`, status: r.status ?? 'pending', assignee: r.run_date ?? '',
+      }));
+      const kpis = (raw.kpis ?? []).map((k: any) => ({
+        name: k.metric_name ?? '', current: Number(k.metric_value) ?? 0, target: Number(k.target_value) ?? 0, unit: k.unit ?? '',
+      }));
+      setData({ sops, checklist, kpis });
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载数据失败');
     } finally {

@@ -304,7 +304,18 @@ export default function BrandOpsPage() {
       const res = await fetch('/api/brand');
       if (!res.ok) throw new Error('获取品牌运营信息失败');
       const json = await res.json();
-      setData(json.data ?? json);
+      const raw = json.data ?? json;
+      const channels = (raw.channels ?? []).map((c: any) => ({
+        platform: c.platform ?? '', followers: c.followers ?? 0, engagementRate: Number(c.engagement_rate) ?? 0,
+      }));
+      const campaigns = (raw.campaigns ?? []).map((c: any) => ({
+        name: c.name, type: c.campaign_type ?? '', status: c.status, budget: c.budget ?? 0,
+        progress: c.budget > 0 ? Math.min(((c.spent ?? 0) / c.budget) * 100, 100) : 0,
+      }));
+      const content = (raw.recentContent ?? []).map((c: any) => ({
+        title: c.title, type: c.content_type ?? 'post', status: c.status, publishedAt: c.publish_date ?? null,
+      }));
+      setData({ channels, campaigns, content });
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载数据失败');
     } finally {

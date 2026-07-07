@@ -312,7 +312,20 @@ export default function InfoCenterPage() {
       const res = await fetch('/api/info-center');
       if (!res.ok) throw new Error('获取信息中心数据失败');
       const json = await res.json();
-      setData(json.data ?? json);
+      const raw = json.data ?? json;
+      const announcements = (raw.announcements ?? []).map((a: any) => ({
+        title: a.title, category: a.category ?? 'general',
+        publishedAt: a.published_at ?? '', summary: (a.content ?? '').slice(0, 120),
+      }));
+      const bookmarks = (raw.bookmarks ?? []).map((b: any) => ({
+        title: b.title, url: b.url ?? '', tags: b.tags ?? [], savedAt: b.created_at ?? '',
+      }));
+      const feeds = (raw.feeds ?? []).map((f: any) => ({
+        name: f.title ?? '', type: f.source ?? 'rss',
+        status: f.is_active ? 'active' : 'inactive',
+        lastFetchedAt: f.last_fetched_at ?? null, itemCount: 0,
+      }));
+      setData({ announcements, bookmarks, feeds });
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载数据失败');
     } finally {

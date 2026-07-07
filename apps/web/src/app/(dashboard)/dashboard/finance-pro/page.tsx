@@ -365,7 +365,18 @@ export default function FinanceProPage() {
       const res = await fetch('/api/finance-pro');
       if (!res.ok) throw new Error('获取财务信息失败');
       const json = await res.json();
-      setData(json.data ?? json);
+      const raw = json.data ?? json;
+      const accounts = (raw.accounts ?? []).map((a: any) => ({
+        name: a.name, type: a.account_type ?? 'bank', balance: a.balance ?? 0,
+      }));
+      const budgets = (raw.budgets ?? []).map((b: any) => ({
+        category: b.category, spent: b.spent ?? 0, limit: b.monthly_limit ?? 0,
+      }));
+      const recurring = (raw.recurringItems ?? []).map((r: any) => ({
+        title: r.title ?? '', amount: r.amount ?? 0, frequency: r.frequency ?? 'monthly',
+        nextDueDate: r.next_due_date ?? '',
+      }));
+      setData({ budgets, accounts, recurring, trends: [] });
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载数据失败');
     } finally {

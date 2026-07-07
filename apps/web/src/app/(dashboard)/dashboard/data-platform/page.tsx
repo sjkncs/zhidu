@@ -339,7 +339,25 @@ export default function DataPlatformPage() {
       const res = await fetch('/api/data-platform');
       if (!res.ok) throw new Error('获取数据平台信息失败');
       const json = await res.json();
-      setData(json.data ?? json);
+      const raw = json.data ?? json;
+      const models = (raw.models ?? []).map((m: any) => ({
+        name: m.name, version: m.version, type: m.model_type ?? '', provider: m.provider ?? '',
+        status: m.status, accuracy: m.metrics?.accuracy ?? 0,
+      }));
+      const pipelines = (raw.pipelines ?? []).map((p: any) => ({
+        name: p.name, type: p.pipeline_type ?? '', status: p.status,
+        lastRunAt: p.last_run_at ?? p.created_at, recordsProcessed: p.records_processed ?? 0,
+      }));
+      const dataQuality = (raw.qualityMetrics ?? []).map((q: any) => ({
+        module: q.module ?? '', completeness: Number(q.completeness) ?? 0,
+      }));
+      setData({
+        activeModels: models.filter((m: any) => m.status === 'active').length,
+        activePipelines: pipelines.filter((p: any) => p.status === 'active').length,
+        avgDataQuality: dataQuality.length > 0 ? dataQuality.reduce((s: number, q: any) => s + q.completeness, 0) / dataQuality.length : 0,
+        todayEvents: 0,
+        models, pipelines, dataQuality,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载数据失败');
     } finally {

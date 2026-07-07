@@ -286,7 +286,18 @@ export default function SupportPage() {
       const res = await fetch('/api/support');
       if (!res.ok) throw new Error('获取客服中心信息失败');
       const json = await res.json();
-      setData(json.data ?? json);
+      const raw = json.data ?? json;
+      const tickets = (raw.tickets ?? []).map((t: any) => ({
+        id: t.id, title: t.title ?? '', status: t.status ?? 'open',
+        priority: t.priority >= 4 ? 'high' : t.priority >= 2 ? 'medium' : 'low',
+        createdAt: t.opened_at ?? t.created_at, assignee: t.assigned_to ?? '未分配',
+      }));
+      const openCount = tickets.filter((t: any) => t.status === 'open' || t.status === 'in_progress').length;
+      const satisfactionScores = (raw.tickets ?? []).filter((t: any) => t.satisfaction != null).map((t: any) => t.satisfaction);
+      const satisfactionScore = satisfactionScores.length > 0 ? satisfactionScores.reduce((s: number, v: number) => s + v, 0) / satisfactionScores.length : 0;
+      const stats = { openCount, avgResolutionTime: 0, satisfactionScore };
+      const faqs = (raw.faqItems ?? []).map((f: any) => ({ question: f.question, viewCount: f.view_count ?? 0 }));
+      setData({ tickets, stats, faqs });
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载数据失败');
     } finally {

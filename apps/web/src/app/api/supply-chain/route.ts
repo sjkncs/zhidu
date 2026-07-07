@@ -15,22 +15,20 @@ export async function GET() {
     const [sourcesResult, inventoryResult, procurementResult] = await Promise.allSettled([
       // Data sources
       supabase
-        .from('supply_data_sources')
-        .select('id, name, type, connection_status, last_sync_at, created_at')
-        .eq('user_id', userId)
+        .from('sc_data_sources')
+        .select('id, name, source_type, url, status, last_sync_at, sync_frequency, records_count, error_count, created_at')
         .order('created_at', { ascending: false }),
 
       // Inventory
       supabase
-        .from('inventory')
-        .select('id, sku, name, quantity, warehouse, unit_cost, updated_at')
-        .eq('user_id', userId)
-        .order('updated_at', { ascending: false }),
+        .from('sc_inventory')
+        .select('id, data_type, total_records, valid_records, last_updated, coverage_rate, quality_score, notes')
+        .order('last_updated', { ascending: false }),
 
       // Procurement items
       supabase
-        .from('procurement_items')
-        .select('id, name, supplier, quantity, unit_price, status, order_date, expected_delivery, created_at')
+        .from('sc_procurement')
+        .select('id, item_name, vendor, amount, status, order_date, delivery_date, notes, created_at')
         .eq('user_id', userId)
         .order('created_at', { ascending: false }),
     ]);
@@ -62,26 +60,26 @@ export async function POST(request: NextRequest) {
     const userId = auth.user.id;
     const body = await request.json();
 
-    const { name, supplier, quantity, unit_price, expected_delivery } = body;
+    const { name, supplier, expected_delivery } = body;
 
-    if (!name || quantity == null) {
+    if (!name) {
       return NextResponse.json(
-        { error: '缺少必填参数: name, quantity' },
+        { error: '缺少必填参数: name' },
         { status: 400 },
       );
     }
 
     const { data, error } = await supabase
-      .from('procurement_items')
+      .from('sc_procurement')
       .upsert({
         user_id: userId,
-        name,
-        supplier: supplier ?? null,
-        quantity: Number(quantity),
-        unit_price: unit_price != null ? Number(unit_price) : null,
+        item_name: name,
+        vendor: supplier ?? null,
+        amount: body.amount != null ? Number(body.amount) : 0,
         status: 'pending',
         order_date: new Date().toISOString(),
-        expected_delivery: expected_delivery ?? null,
+        delivery_date: expected_delivery ?? null,
+        notes: body.notes ?? null,
       })
       .select()
       .single();

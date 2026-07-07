@@ -16,21 +16,21 @@ export async function GET() {
       // Brand channels
       supabase
         .from('brand_channels')
-        .select('id, name, platform, status, followers, created_at')
+        .select('id, channel_name, platform, channel_type, status, followers, engagement_rate, content_count, created_at')
         .eq('user_id', userId)
         .order('created_at', { ascending: false }),
 
       // Campaigns
       supabase
-        .from('campaigns')
-        .select('id, name, status, channel_id, start_date, end_date, budget, created_at')
+        .from('brand_campaigns')
+        .select('id, name, campaign_type, channel_ids, status, budget, spent, start_date, end_date, kpi_targets, kpi_actuals, created_at')
         .eq('user_id', userId)
         .order('created_at', { ascending: false }),
 
       // Recent content
       supabase
         .from('brand_content')
-        .select('id, title, channel_id, status, published_at, created_at')
+        .select('id, title, channel_id, campaign_id, content_type, status, publish_date, metrics, created_at')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(10),
@@ -85,8 +85,9 @@ export async function POST(request: NextRequest) {
         .from('brand_channels')
         .insert({
           user_id: userId,
-          name,
+          channel_name: name,
           platform,
+          channel_type: body.channel_type ?? 'social',
           status: 'active',
           followers: 0,
         })
@@ -107,15 +108,15 @@ export async function POST(request: NextRequest) {
     }
 
     const { data, error } = await supabase
-      .from('campaigns')
+      .from('brand_campaigns')
       .insert({
         user_id: userId,
         name,
-        channel_id: channel_id ?? null,
-        status: 'draft',
+        campaign_type: body.campaign_type ?? 'content',
+        status: 'planning',
         start_date: start_date ?? null,
         end_date: end_date ?? null,
-        budget: budget != null ? Number(budget) : null,
+        budget: budget != null ? Number(budget) : 0,
       })
       .select()
       .single();

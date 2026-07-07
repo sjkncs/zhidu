@@ -295,7 +295,28 @@ export default function UserOpsPage() {
       const res = await fetch('/api/user-ops');
       if (!res.ok) throw new Error('获取用户运营信息失败');
       const json = await res.json();
-      setData(json.data ?? json);
+      const raw = json.data ?? json;
+      // Aggregate funnel events by event_type
+      const eventCounts: Record<string, number> = {};
+      (raw.funnelEvents ?? []).forEach((e: any) => {
+        eventCounts[e.event_type] = (eventCounts[e.event_type] ?? 0) + 1;
+      });
+      const funnelOrder = ['signup', 'first_chat', 'first_plan', 'upgrade', 'refer'];
+      const funnel = funnelOrder
+        .filter((et) => eventCounts[et] != null)
+        .map((et, idx, arr) => ({
+          label: et, value: eventCounts[et],
+          conversionRate: idx > 0 && eventCounts[arr[idx - 1]] > 0
+            ? (eventCounts[et] / eventCounts[arr[idx - 1]]) * 100 : 100,
+        }));
+      const cohorts = (raw.cohorts ?? []).map((c: any) => ({
+        name: c.cohort_name ?? '', userCount: c.user_count ?? 0,
+        retentionD1: Number(c.retention_d1) ?? 0, retentionD7: Number(c.retention_d7) ?? 0, retentionD30: Number(c.retention_d30) ?? 0,
+      }));
+      const segments = (raw.segments ?? []).map((s: any) => ({
+        name: s.name, userCount: s.user_count ?? 0, description: s.description ?? '',
+      }));
+      setData({ funnel, cohorts, segments });
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载数据失败');
     } finally {

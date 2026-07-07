@@ -15,24 +15,22 @@ export async function GET() {
     const [funnelResult, cohortsResult, segmentsResult] = await Promise.allSettled([
       // Funnel events
       supabase
-        .from('funnel_events')
-        .select('id, event_type, stage, count, conversion_rate, created_at')
+        .from('uo_funnel_events')
+        .select('id, event_type, event_data, session_id, created_at')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(20),
 
       // Cohorts
       supabase
-        .from('cohorts')
-        .select('id, name, description, user_count, created_at, start_date, end_date')
-        .eq('user_id', userId)
+        .from('uo_cohorts')
+        .select('id, cohort_name, cohort_date, user_count, retention_d1, retention_d7, retention_d30, conversion_rate, avg_sessions, notes, created_at')
         .order('created_at', { ascending: false }),
 
       // Segments
       supabase
-        .from('segments')
-        .select('id, name, criteria, user_count, is_active, created_at')
-        .eq('user_id', userId)
+        .from('uo_user_segments')
+        .select('id, name, description, criteria, user_count, last_computed_at, created_at')
         .order('created_at', { ascending: false }),
     ]);
 
@@ -63,23 +61,22 @@ export async function POST(request: NextRequest) {
     const userId = auth.user.id;
     const body = await request.json();
 
-    const { event_type, stage, count, conversion_rate } = body;
+    const { event_type } = body;
 
-    if (!event_type || !stage) {
+    if (!event_type) {
       return NextResponse.json(
-        { error: '缺少必填参数: event_type, stage' },
+        { error: '缺少必填参数: event_type' },
         { status: 400 },
       );
     }
 
     const { data, error } = await supabase
-      .from('funnel_events')
+      .from('uo_funnel_events')
       .insert({
         user_id: userId,
         event_type,
-        stage,
-        count: count != null ? Number(count) : 1,
-        conversion_rate: conversion_rate != null ? Number(conversion_rate) : null,
+        event_data: body.event_data ?? {},
+        session_id: body.session_id ?? null,
       })
       .select()
       .single();

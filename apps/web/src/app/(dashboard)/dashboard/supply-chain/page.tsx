@@ -338,7 +338,21 @@ export default function SupplyChainPage() {
       const res = await fetch('/api/supply-chain');
       if (!res.ok) throw new Error('获取供应链信息失败');
       const json = await res.json();
-      setData(json.data ?? json);
+      const raw = json.data ?? json;
+      const sources = (raw.dataSources ?? []).map((s: any) => ({
+        name: s.name, type: s.source_type ?? '',
+        syncStatus: s.status === 'active' ? 'synced' : s.status === 'error' ? 'error' : 'pending',
+        lastSyncAt: s.last_sync_at ?? null,
+      }));
+      const inventory = (raw.inventory ?? []).map((i: any) => ({
+        dataType: i.data_type ?? '', totalRecords: i.total_records ?? 0,
+        qualityScore: Number(i.quality_score) ?? 0, coverageRate: Number(i.coverage_rate) ?? 0,
+      }));
+      const procurement = (raw.procurementItems ?? []).map((p: any) => ({
+        title: p.item_name ?? '', supplier: p.vendor ?? '', status: p.status ?? 'pending',
+        amount: p.amount ?? 0, createdAt: p.order_date ?? p.created_at,
+      }));
+      setData({ sources, inventory, procurement });
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载数据失败');
     } finally {

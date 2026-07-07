@@ -15,22 +15,22 @@ export async function GET() {
     const [accountsResult, budgetsResult, recurringResult] = await Promise.allSettled([
       // Financial accounts
       supabase
-        .from('finance_accounts')
-        .select('id, name, type, balance, currency, created_at')
+        .from('fin_accounts')
+        .select('id, name, account_type, balance, currency, is_default, created_at')
         .eq('user_id', userId)
         .order('created_at', { ascending: false }),
 
       // Budgets
       supabase
-        .from('budgets')
-        .select('id, category, amount, spent, period, start_date, end_date, created_at')
+        .from('fin_budgets')
+        .select('id, category, monthly_limit, spent, period_start, period_end, created_at, updated_at')
         .eq('user_id', userId)
-        .order('start_date', { ascending: false }),
+        .order('period_start', { ascending: false }),
 
       // Recurring items
       supabase
-        .from('recurring_items')
-        .select('id, name, amount, frequency, next_due_date, category, is_active, created_at')
+        .from('fin_recurring')
+        .select('id, title, amount, type, frequency, category, next_due_date, is_active, created_at')
         .eq('user_id', userId)
         .order('next_due_date', { ascending: true }),
     ]);
@@ -81,15 +81,14 @@ export async function POST(request: NextRequest) {
       }
 
       const { data, error } = await supabase
-        .from('budgets')
+        .from('fin_budgets')
         .insert({
           user_id: userId,
           category,
-          amount: Number(amount),
+          monthly_limit: Number(amount),
           spent: 0,
-          period,
-          start_date: start_date ?? null,
-          end_date: end_date ?? null,
+          period_start: start_date ?? new Date().toISOString().split('T')[0],
+          period_end: end_date ?? null,
         })
         .select()
         .single();
@@ -108,11 +107,12 @@ export async function POST(request: NextRequest) {
     }
 
     const { data, error } = await supabase
-      .from('recurring_items')
+      .from('fin_recurring')
       .insert({
         user_id: userId,
-        name,
+        title: name,
         amount: Number(amount),
+        type: body.type ?? 'EXPENSE',
         frequency,
         category: category ?? null,
         next_due_date: next_due_date ?? null,

@@ -15,24 +15,21 @@ export async function GET() {
     const [modelsResult, pipelinesResult, qualityResult] = await Promise.allSettled([
       // Data models
       supabase
-        .from('data_models')
-        .select('id, name, description, status, version, created_at, updated_at')
-        .eq('user_id', userId)
+        .from('dp_model_registry')
+        .select('id, name, version, model_type, provider, status, description, metrics, created_at, updated_at')
         .order('updated_at', { ascending: false }),
 
       // Data pipelines
       supabase
-        .from('data_pipelines')
-        .select('id, name, type, schedule, status, last_run_at, created_at')
-        .eq('user_id', userId)
+        .from('dp_data_pipeline')
+        .select('id, name, pipeline_type, schedule, status, last_run_at, last_run_status, records_processed, created_at, updated_at')
         .order('created_at', { ascending: false }),
 
       // Data quality metrics
       supabase
-        .from('data_quality_metrics')
-        .select('id, model_id, metric_name, value, measured_at')
-        .eq('user_id', userId)
-        .order('measured_at', { ascending: false })
+        .from('dp_quality_metrics')
+        .select('id, metric_date, module, total_records, valid_records, completeness, accuracy, freshness_hours, anomalies_detected, created_at')
+        .order('metric_date', { ascending: false })
         .limit(20),
     ]);
 
@@ -82,13 +79,13 @@ export async function POST(request: NextRequest) {
       }
 
       const { data, error } = await supabase
-        .from('data_models')
+        .from('dp_model_registry')
         .upsert({
-          user_id: userId,
           name,
           description: description ?? null,
-          status: status ?? 'draft',
-          version: version ?? '1.0.0',
+          status: status ?? 'active',
+          version: version ?? '1.0',
+          model_type: body.model_type ?? 'rule_engine',
         })
         .select()
         .single();
@@ -107,13 +104,12 @@ export async function POST(request: NextRequest) {
     }
 
     const { data, error } = await supabase
-      .from('data_pipelines')
+      .from('dp_data_pipeline')
       .upsert({
-        user_id: userId,
         name,
-        type: type ?? 'batch',
+        pipeline_type: type ?? 'batch',
         schedule: schedule ?? null,
-        status: 'idle',
+        status: 'active',
       })
       .select()
       .single();
