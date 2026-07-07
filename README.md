@@ -2,7 +2,7 @@
 
 <br/>
 
-<img src="https://raw.githubusercontent.com/sjkncs/zhidu/master/apps/web/public/next.svg" width="80" alt="Zhidu Logo" />
+<img src="https://raw.githubusercontent.com/sjkncs/zhidu/master/assets/logo.svg" width="80" alt="Zhidu Logo" />
 
 # **知渡 Zhidu**
 
@@ -72,26 +72,27 @@
 
 知渡采用三层 AI 路由架构，按任务复杂度智能分流，兼顾性能与成本：
 
-```
-                        ┌─────────────────────┐
-                        │   意图路由层 (Rule)   │
-                        └────────┬────────────┘
-                                 │
-                  ┌──────────────┼──────────────┐
-                  ▼              ▼              ▼
-         ┌────────────┐  ┌────────────┐  ┌────────────┐
-         │  规则引擎   │  │  RAG 检索   │  │  LLM 深度  │
-         │            │  │            │  │   分析      │
-         │ 分数线匹配  │  │ 知识库问答  │  │ 方案生成   │
-         │ 位次计算    │  │ 简历匹配   │  │ 生涯规划   │
-         │ 梯度分配    │  │ 课程推荐   │  │ 情绪洞察   │
-         │ 风险评级    │  │ 政策解读   │  │ 面试模拟   │
-         └────────────┘  └────────────┘  └────────────┘
-```
+<div align="center">
+
+<img src="https://raw.githubusercontent.com/sjkncs/zhidu/master/docs/images/ai-hybrid-architecture.png" width="800" alt="AI Hybrid Routing Architecture" />
+
+</div>
 
 - **确定性任务** → 规则引擎，0 延迟，0 成本
 - **检索增强任务** → RAG (pgvector)，中等成本
 - **创造性/分析性任务** → LLM 深度推理 (DeepSeek / GLM / GPT-4o)
+
+<br/>
+
+## AI 志愿填报流程
+
+知渡的 AI 志愿填报引擎采用五阶段流水线架构，从数据采集到方案输出，全程 AI 驱动：
+
+<div align="center">
+
+<img src="https://raw.githubusercontent.com/sjkncs/zhidu/master/docs/images/volunteer-workflow.png" width="800" alt="AI Volunteer Application Workflow" />
+
+</div>
 
 <br/>
 
@@ -184,22 +185,11 @@ npx supabase db push
 
 知渡将所有功能模块分为四层，按优先级递进：
 
-```
-┌─────────────────────────────────────────────────────┐
-│                第一层：核心引擎 (Core Engine)          │
-│   AI 志愿填报 · 生涯规划 · MBTI/霍兰德测评            │
-├─────────────────────────────────────────────────────┤
-│              第二层：成长管理 (Growth Management)      │
-│   大学管理 · 技能树 · 知识库 · 简历 · 实习 · 科研      │
-├─────────────────────────────────────────────────────┤
-│               第三层：个人空间 (Personal Space)        │
-│   时间管理 · 备忘录 · 日记 · 财富管理                  │
-├─────────────────────────────────────────────────────┤
-│          第四层：企业管理 (Enterprise Modules)         │
-│   数据平台 · 财务 · 品牌 · 运营 · 战略 · 客服          │
-│   供应链 · 用户运营 · 信息中心                         │
-└─────────────────────────────────────────────────────┘
-```
+<div align="center">
+
+<img src="https://raw.githubusercontent.com/sjkncs/zhidu/master/docs/images/module-architecture.png" width="800" alt="Four-Layer Module Architecture" />
+
+</div>
 
 <br/>
 
