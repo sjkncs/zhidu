@@ -3,8 +3,11 @@ const CACHE_VERSION = 'zhidu-sw-v1';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `dynamic-${CACHE_VERSION}`;
 
-// Static assets to pre-cache on install
-const PRECACHE_URLS = [
+// Development mode: skip all caching on localhost to avoid stale bundles
+const IS_DEV = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
+
+// Static assets to pre-cache on install (production only)
+const PRECACHE_URLS = IS_DEV ? [] : [
   '/offline',
   '/manifest.webmanifest',
   '/icon-192.png',
@@ -29,6 +32,10 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
+      if (IS_DEV) {
+        // Dev mode: clear ALL caches to prevent stale bundles
+        return Promise.all(keys.map((key) => caches.delete(key)));
+      }
       return Promise.all(
         keys
           .filter((key) => key !== STATIC_CACHE && key !== DYNAMIC_CACHE)
@@ -44,6 +51,9 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
+
+  // Development mode: pass everything through to network (no caching)
+  if (IS_DEV) return;
 
   // Skip non-GET requests
   if (request.method !== 'GET') return;
