@@ -43,50 +43,59 @@ export function EditPanel({ message, onSave, onClose }: EditPanelProps) {
 
   /**
    * 在 WPS 中打开
-   * 将 Markdown 转为 HTML 后上传至 Supabase Storage，
-   * 生成签名 URL 后跳转至 WPS 在线编辑（WPS 不支持 .md 格式）
+   * 将 Markdown 转为 Word 兼容 HTML 后上传为 .doc 文件，
+   * WPS 原生支持 .doc 格式，可直接编辑
    */
   const handleOpenInWps = useCallback(async () => {
     if (isOpeningWps) return;
     setIsOpeningWps(true);
 
     try {
-      // Convert Markdown to a simple HTML document that WPS can open
-      const htmlContent = `<!DOCTYPE html>
-<html lang="zh-CN">
+      // Convert Markdown to Word-compatible HTML
+      const bodyHtml = content
+        .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+        .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+        .replace(/^# (.*$)/gm, '<h1>$1</h1>')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/`(.*?)`/g, '<code style="background:#f0f0f0;padding:1px 4px;font-family:Consolas,monospace;">$1</code>')
+        .replace(/^\> (.*$)/gm, '<p style="border-left:3px solid #ccc;padding-left:12px;color:#555;">$1</p>')
+        .replace(/^\- (.*$)/gm, '<li>$1</li>')
+        .replace(/^\d+\. (.*$)/gm, '<li>$1</li>')
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/\n/g, '<br>');
+
+      const docContent = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
+xmlns:w="urn:schemas-microsoft-com:office:word"
+xmlns="http://www.w3.org/TR/REC-html40">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <title>编辑内容</title>
+<!--[if gte mso 9]>
+<xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml>
+<![endif]-->
 <style>
-  body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.8; color: #333; }
-  h1, h2, h3 { color: #1a1a1a; }
-  code { background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
-  pre { background: #f5f5f5; padding: 16px; border-radius: 6px; overflow-x: auto; }
-  blockquote { border-left: 3px solid #ddd; margin-left: 0; padding-left: 16px; color: #666; }
-  table { border-collapse: collapse; width: 100%; }
-  th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
-  th { background: #f5f5f5; }
+  body { font-family: 'Microsoft YaHei', 'SimSun', serif; font-size: 12pt; line-height: 1.8; color: #333; margin: 2.54cm 3.17cm; }
+  h1 { font-size: 22pt; font-weight: bold; color: #1a1a1a; }
+  h2 { font-size: 16pt; font-weight: bold; color: #1a1a1a; }
+  h3 { font-size: 14pt; font-weight: bold; color: #1a1a1a; }
+  p { margin: 0.5em 0; }
+  li { margin: 0.25em 0; }
+  code { background: #f0f0f0; padding: 1px 4px; font-family: Consolas, 'Courier New', monospace; font-size: 10.5pt; }
+  table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
+  th, td { border: 1px solid #999; padding: 6px 10px; text-align: left; }
+  th { background: #f0f0f0; font-weight: bold; }
 </style>
 </head>
 <body>
-${content
-  .replace(/^### (.*$)/gm, '<h3>$1</h3>')
-  .replace(/^## (.*$)/gm, '<h2>$1</h2>')
-  .replace(/^# (.*$)/gm, '<h1>$1</h1>')
-  .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-  .replace(/\*(.*?)\*/g, '<em>$1</em>')
-  .replace(/`(.*?)`/g, '<code>$1</code>')
-  .replace(/^\> (.*$)/gm, '<blockquote>$1</blockquote>')
-  .replace(/^\- (.*$)/gm, '<li>$1</li>')
-  .replace(/^\d+\. (.*$)/gm, '<li>$1</li>')
-  .replace(/\n\n/g, '</p><p>')
-  .replace(/\n/g, '<br>')}
+${bodyHtml}
 </body>
 </html>`;
 
-      const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
-      const file = new File([blob], `edit-${message.id}-${Date.now()}.html`, {
-        type: 'text/html',
+      const blob = new Blob([docContent], { type: 'application/msword;charset=utf-8' });
+      const file = new File([blob], `edit-${message.id}-${Date.now()}.doc`, {
+        type: 'application/msword',
       });
 
       const formData = new FormData();
