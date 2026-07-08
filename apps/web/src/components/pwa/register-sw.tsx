@@ -2,10 +2,27 @@
 
 import { useEffect } from 'react';
 
+const IS_DEV = typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
 export function RegisterSW() {
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
 
+    // Development mode: unregister SW and clear caches to prevent stale bundles
+    if (IS_DEV) {
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        regs.forEach((reg) => reg.unregister());
+      });
+      if ('caches' in window) {
+        caches.keys().then((keys) => {
+          keys.forEach((key) => caches.delete(key));
+        });
+      }
+      return;
+    }
+
+    // Production: register SW normally
     async function register() {
       try {
         const registration = await navigator.serviceWorker.register('/sw.js', {
@@ -24,7 +41,6 @@ export function RegisterSW() {
 
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              // New SW available, notify user
               window.dispatchEvent(new CustomEvent('sw-update-available'));
             }
           });
@@ -42,7 +58,6 @@ export function RegisterSW() {
       }
     }
 
-    // Register after page load to avoid blocking rendering
     if (document.readyState === 'complete') {
       register();
     } else {
