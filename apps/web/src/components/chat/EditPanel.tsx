@@ -43,17 +43,50 @@ export function EditPanel({ message, onSave, onClose }: EditPanelProps) {
 
   /**
    * 在 WPS 中打开
-   * 通过服务端 API 上传至 Supabase Storage（绕过 RLS），
-   * 生成签名 URL 后跳转至 WPS 在线编辑
+   * 将 Markdown 转为 HTML 后上传至 Supabase Storage，
+   * 生成签名 URL 后跳转至 WPS 在线编辑（WPS 不支持 .md 格式）
    */
   const handleOpenInWps = useCallback(async () => {
     if (isOpeningWps) return;
     setIsOpeningWps(true);
 
     try {
-      const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
-      const file = new File([blob], `edit-${message.id}-${Date.now()}.md`, {
-        type: 'text/markdown',
+      // Convert Markdown to a simple HTML document that WPS can open
+      const htmlContent = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>编辑内容</title>
+<style>
+  body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.8; color: #333; }
+  h1, h2, h3 { color: #1a1a1a; }
+  code { background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+  pre { background: #f5f5f5; padding: 16px; border-radius: 6px; overflow-x: auto; }
+  blockquote { border-left: 3px solid #ddd; margin-left: 0; padding-left: 16px; color: #666; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+  th { background: #f5f5f5; }
+</style>
+</head>
+<body>
+${content
+  .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+  .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+  .replace(/^# (.*$)/gm, '<h1>$1</h1>')
+  .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+  .replace(/\*(.*?)\*/g, '<em>$1</em>')
+  .replace(/`(.*?)`/g, '<code>$1</code>')
+  .replace(/^\> (.*$)/gm, '<blockquote>$1</blockquote>')
+  .replace(/^\- (.*$)/gm, '<li>$1</li>')
+  .replace(/^\d+\. (.*$)/gm, '<li>$1</li>')
+  .replace(/\n\n/g, '</p><p>')
+  .replace(/\n/g, '<br>')}
+</body>
+</html>`;
+
+      const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+      const file = new File([blob], `edit-${message.id}-${Date.now()}.html`, {
+        type: 'text/html',
       });
 
       const formData = new FormData();
