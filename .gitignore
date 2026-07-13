@@ -41,3 +41,22 @@ coverage/
 # Misc
 *.tsbuildinfo
 .vercel
+
+# Temp / debug artifacts
+diag.txt
+test-*-output.txt
+*-output.txt
+server-log*.txt
+db_src_listing.txt
+dbtest.txt
+test_cmd.txt
+
+# ML model outputs (generated, not source)
+packages/ml/output/
+
+# IDE / agent tool configs
+.codebuddy/
+
+# Large personal files
+*.zip
+*.docx
