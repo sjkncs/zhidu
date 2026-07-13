@@ -54,7 +54,7 @@ interface LedgerEntry {
   channel: string | null;
   status: string;
   created_at: string;
-  fund_accounts: { name: string; account_type: string } | null;
+  account_id: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -397,7 +397,7 @@ export default function FundPanel() {
                         <div>
                           <p className="text-xs font-medium text-text-primary">{entry.title}</p>
                           <p className="text-[10px] text-text-secondary">
-                            {entry.fund_accounts?.name ?? '-'} · {new Date(entry.created_at).toLocaleDateString('zh-CN')}
+                            {accounts.find((a) => a.id === entry.account_id)?.name ?? '-'} · {new Date(entry.created_at).toLocaleDateString('zh-CN')}
                           </p>
                         </div>
                       </div>

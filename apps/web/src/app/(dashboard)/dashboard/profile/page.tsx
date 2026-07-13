@@ -20,6 +20,8 @@ import {
   Sun,
   Moon,
   Monitor,
+  X,
+  Save,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth-store';
@@ -54,6 +56,10 @@ interface BillingOverview {
 interface Profile {
   province: string | null;
   grade: string | null;
+  total_score: number | null;
+  rank: number | null;
+  track: string | null;
+  notes: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -97,9 +103,11 @@ function daysRemaining(expiresAt: string | null): number | null {
 function UserInfoCard({
   email,
   createdAt,
+  onEdit,
 }: {
   email: string;
   createdAt: string;
+  onEdit: () => void;
 }) {
   const initial = email ? email[0].toUpperCase() : '?';
 
@@ -122,6 +130,7 @@ function UserInfoCard({
         {/* Edit button */}
         <button
           type="button"
+          onClick={onEdit}
           className="flex items-center gap-2 rounded-lg border border-border bg-surface-elevated px-4 py-2 text-sm font-medium text-text-secondary transition hover:border-blue/30 hover:text-blue"
         >
           <Edit3 className="h-4 w-4" />
@@ -314,7 +323,13 @@ function AICreditsCard({ credits }: { credits: Credits }) {
 // Section: Account Settings Card
 // ---------------------------------------------------------------------------
 
-function AccountSettingsCard({ profile }: { profile: Profile | null }) {
+function AccountSettingsCard({
+  profile,
+  onEdit,
+}: {
+  profile: Profile | null;
+  onEdit: () => void;
+}) {
   const { theme, setTheme } = useTheme();
 
   const themeOptions = [
@@ -323,37 +338,46 @@ function AccountSettingsCard({ profile }: { profile: Profile | null }) {
     { value: 'system', label: '跟随系统', icon: Monitor },
   ] as const;
 
+  const fields = [
+    { icon: MapPin, label: '所在省份', value: profile?.province || '未设置' },
+    { icon: GraduationCap, label: '年级', value: profile?.grade || '未设置' },
+    { label: '总分', value: profile?.total_score != null ? `${profile.total_score} 分` : '未设置' },
+    { label: '省排名', value: profile?.rank != null ? `第 ${profile.rank} 名` : '未设置' },
+    { label: '文理', value: profile?.track || '未设置' },
+    { label: '备注', value: profile?.notes || '无', multiline: true },
+  ];
+
   return (
     <section className="rounded-xl border border-border bg-surface p-6">
-      <div className="flex items-center gap-2 mb-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue/10">
-          <Settings className="h-4.5 w-4.5 text-blue" />
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue/10">
+            <Settings className="h-4.5 w-4.5 text-blue" />
+          </div>
+          <h2 className="text-lg font-semibold text-text-primary">账户设置</h2>
         </div>
-        <h2 className="text-lg font-semibold text-text-primary">账户设置</h2>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-text-secondary hover:border-blue/30 hover:text-blue transition"
+        >
+          <Edit3 className="h-3.5 w-3.5" />
+          编辑
+        </button>
       </div>
 
-      <div className="space-y-5">
-        {/* Province */}
-        <div className="flex items-center justify-between py-3 border-b border-border/50">
-          <div className="flex items-center gap-3">
-            <MapPin className="h-4 w-4 text-text-tertiary" />
-            <span className="text-sm text-text-secondary">所在省份</span>
+      <div className="space-y-1">
+        {fields.map((field) => (
+          <div key={field.label} className="flex items-center justify-between py-3 border-b border-border/50 last:border-0">
+            <div className="flex items-center gap-3">
+              {field.icon && <field.icon className="h-4 w-4 text-text-tertiary" />}
+              <span className="text-sm text-text-secondary">{field.label}</span>
+            </div>
+            <span className={`text-sm font-medium text-text-primary ${field.multiline ? 'max-w-[200px] truncate text-right' : ''}`}>
+              {field.value}
+            </span>
           </div>
-          <span className="text-sm font-medium text-text-primary">
-            {profile?.province || '未设置'}
-          </span>
-        </div>
-
-        {/* Grade */}
-        <div className="flex items-center justify-between py-3 border-b border-border/50">
-          <div className="flex items-center gap-3">
-            <GraduationCap className="h-4 w-4 text-text-tertiary" />
-            <span className="text-sm text-text-secondary">年级</span>
-          </div>
-          <span className="text-sm font-medium text-text-primary">
-            {profile?.grade || '未设置'}
-          </span>
-        </div>
+        ))}
 
         {/* Theme toggle */}
         <div className="flex items-center justify-between py-3">
@@ -378,6 +402,200 @@ function AccountSettingsCard({ profile }: { profile: Profile | null }) {
         </div>
       </div>
     </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Edit Profile Modal
+// ---------------------------------------------------------------------------
+
+const PROVINCE_OPTIONS = [
+  '北京','天津','上海','重庆','河北','山西','辽宁','吉林','黑龙江',
+  '江苏','浙江','安徽','福建','江西','山东','河南','湖北','湖南',
+  '广东','海南','四川','贵州','云南','陕西','甘肃','青海','内蒙古',
+  '广西','西藏','宁夏','新疆',
+];
+
+const GRADE_OPTIONS = ['高一','高二','高三','复读','大一','大二','大三','大四','研一','研二','研三','已毕业'];
+
+function EditProfileModal({
+  profile,
+  onClose,
+  onSaved,
+}: {
+  profile: Profile | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = useState({
+    province: profile?.province ?? '',
+    grade: profile?.grade ?? '',
+    total_score: profile?.total_score?.toString() ?? '',
+    rank: profile?.rank?.toString() ?? '',
+    track: profile?.track ?? '',
+    notes: profile?.notes ?? '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const body: Record<string, unknown> = {};
+      if (form.province) body.province = form.province;
+      if (form.grade) body.grade = form.grade;
+      if (form.total_score) body.total_score = parseInt(form.total_score, 10);
+      if (form.rank) body.rank = parseInt(form.rank, 10);
+      if (form.track) body.track = form.track;
+      body.notes = form.notes || null;
+
+      const res = await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '保存失败');
+      }
+
+      setSuccess(true);
+      setTimeout(() => {
+        onSaved();
+        onClose();
+      }, 800);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="w-full max-w-lg rounded-xl border border-border bg-surface p-6 shadow-xl">
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-lg font-semibold text-text-primary">编辑个人资料</h3>
+          <button onClick={onClose} className="text-text-secondary hover:text-text-primary">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {success ? (
+          <div className="flex flex-col items-center py-8">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-500/10 mb-3">
+              <Check className="w-6 h-6 text-green-500" />
+            </div>
+            <p className="text-sm font-medium text-text-primary">保存成功</p>
+          </div>
+        ) : (
+          <>
+            {error && (
+              <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-500">
+                <AlertCircle className="w-4 h-4" />{error}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1">省份</label>
+                  <select
+                    value={form.province}
+                    onChange={(e) => setForm({ ...form, province: e.target.value })}
+                    className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-blue"
+                  >
+                    <option value="">选择省份</option>
+                    {PROVINCE_OPTIONS.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1">年级</label>
+                  <select
+                    value={form.grade}
+                    onChange={(e) => setForm({ ...form, grade: e.target.value })}
+                    className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-blue"
+                  >
+                    <option value="">选择年级</option>
+                    {GRADE_OPTIONS.map((g) => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1">总分</label>
+                  <input
+                    value={form.total_score}
+                    onChange={(e) => setForm({ ...form, total_score: e.target.value })}
+                    placeholder="680"
+                    type="number"
+                    className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-blue"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1">省排名</label>
+                  <input
+                    value={form.rank}
+                    onChange={(e) => setForm({ ...form, rank: e.target.value })}
+                    placeholder="1200"
+                    type="number"
+                    className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-blue"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1">文理</label>
+                  <select
+                    value={form.track}
+                    onChange={(e) => setForm({ ...form, track: e.target.value })}
+                    className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-blue"
+                  >
+                    <option value="">选择</option>
+                    <option value="理">理科 / 物理类</option>
+                    <option value="文">文科 / 历史类</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">备注</label>
+                <textarea
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  placeholder="目标院校、兴趣方向、特殊需求等..."
+                  rows={3}
+                  className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-text-primary outline-none focus:border-blue resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={onClose}
+                className="flex-1 rounded-lg border border-border py-2 text-sm text-text-secondary hover:bg-surface-elevated"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-blue py-2 text-sm text-white hover:bg-blue/90 disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                保存
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -434,6 +652,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -464,6 +683,10 @@ export default function ProfilePage() {
           setProfile({
             province: profileData?.province ?? null,
             grade: profileData?.grade ?? null,
+            total_score: profileData?.total_score ?? null,
+            rank: profileData?.rank ?? null,
+            track: profileData?.track ?? null,
+            notes: profileData?.notes ?? null,
           });
         }
       }
@@ -602,6 +825,7 @@ export default function ProfilePage() {
       <UserInfoCard
         email={user.email ?? ''}
         createdAt={user.created_at ?? new Date().toISOString()}
+        onEdit={() => setShowEditModal(true)}
       />
 
       {/* Subscription + Credits grid */}
@@ -611,10 +835,22 @@ export default function ProfilePage() {
       </div>
 
       {/* Account settings */}
-      <AccountSettingsCard profile={profile} />
+      <AccountSettingsCard
+        profile={profile}
+        onEdit={() => setShowEditModal(true)}
+      />
 
       {/* Danger zone */}
       <DangerZone />
+
+      {/* Edit Profile Modal */}
+      {showEditModal && (
+        <EditProfileModal
+          profile={profile}
+          onClose={() => setShowEditModal(false)}
+          onSaved={fetchData}
+        />
+      )}
     </div>
   );
 }

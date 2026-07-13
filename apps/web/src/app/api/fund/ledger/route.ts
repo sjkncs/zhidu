@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('fund_ledger')
-      .select('*, fund_accounts!fund_ledger_account_id_fkey(name, account_type), fund_accounts!fund_ledger_to_account_id_fkey(name:to_account_name)', { count: 'exact' })
+      .select('*', { count: 'exact' })
       .eq('user_id', auth.user.id)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
