@@ -21,7 +21,7 @@ export function SourcePanel({ sources }: SourcePanelProps) {
   if (!sources.length) return null;
 
   return (
-    <div className="mt-3 overflow-hidden rounded-xl border border-border/60 bg-surface/50">
+    <div data-source-panel className="mt-3 overflow-hidden rounded-xl border border-border/60 bg-surface/50">
       {/* Header */}
       <button
         onClick={() => setExpanded(!expanded)}
@@ -43,10 +43,16 @@ export function SourcePanel({ sources }: SourcePanelProps) {
           <div className="flex flex-col gap-1.5">
             {sources.map((source, i) => {
               const rel = relevanceLabel(source.score);
+              const hasUrl = !!source.url;
+              const handleClick = () => {
+                if (hasUrl) window.open(source.url, '_blank', 'noopener,noreferrer');
+              };
               return (
                 <div
                   key={i}
-                  className="group flex gap-3 rounded-lg px-2.5 py-2 transition-colors hover:bg-surface-elevated/50"
+                  id={`source-ref-${i + 1}`}
+                  onClick={handleClick}
+                  className={`group flex gap-3 rounded-lg px-2.5 py-2 transition-colors hover:bg-surface-elevated/50 ${hasUrl ? 'cursor-pointer' : ''}`}
                 >
                   {/* Number badge */}
                   <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-navy/8 text-[10px] font-bold text-navy">
@@ -64,6 +70,9 @@ export function SourcePanel({ sources }: SourcePanelProps) {
                       >
                         {rel.text}
                       </span>
+                      {hasUrl && (
+                        <ExternalLink className="h-3 w-3 shrink-0 text-text-tertiary opacity-0 transition-opacity group-hover:opacity-100" />
+                      )}
                     </div>
                     {source.snippet && (
                       <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-text-tertiary">

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { parseSSEStream, type Source } from '@/lib/sse-parser';
+import { parseSSEStream, type Source, type ChoicePromptData, type TaskUpdateData } from '@/lib/sse-parser';
 import type { ChatMode } from '@/components/chat/ChatInput';
 
 export interface ChatMessage {
@@ -9,6 +9,14 @@ export interface ChatMessage {
   sources?: Source[];
   createdAt: number;
   isStreaming?: boolean;
+  /** P1: 结构化选择引导 — AI 向用户展示的选项卡片 */
+  choicePrompt?: ChoicePromptData;
+  /** P1: 用户对该选择引导的回答（已选选项标签数组） */
+  choiceResponse?: string[];
+  /** P1: 用户是否已回答该选择引导 */
+  choiceAnswered?: boolean;
+  /** P3: 多步骤任务进度追踪 */
+  tasks?: TaskUpdateData[];
 }
 
 export interface ChatSession {
@@ -26,7 +34,9 @@ interface ChatState {
   isStreaming: boolean;
   error: string | null;
 
-  sendMessage: (query: string, preferMode?: ChatMode) => Promise<void>;
+  sendMessage: (query: string, preferMode?: ChatMode, choiceResponse?: string[]) => Promise<void>;
+  /** P1: 用户对结构化选择引导的回答，自动触发下一轮对话 */
+  sendChoiceResponse: (messageId: string, selectedLabels: string[]) => Promise<void>;
   clearMessages: () => void;
   clearError: () => void;
   fetchSessions: () => Promise<void>;
@@ -101,7 +111,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  sendMessage: async (query: string, preferMode?: ChatMode) => {
+  sendMessage: async (query: string, preferMode?: ChatMode, choiceResponse?: string[]) => {
     const trimmed = query.trim();
     if (!trimmed || get().isStreaming) return;
 
@@ -146,6 +156,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           context,
           sessionId: get().currentSessionId,
           preferMode,
+          ...(choiceResponse ? { choiceResponse } : {}),
         }),
       });
 
@@ -163,7 +174,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const reader = response.body.getReader();
       let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
-      // 30 秒无新数据超时
+      // 60 秒无新数据超时（管线含 IntentClarifier + StructuredQuery + RAG + LLM 流式生成）
       const resetTimeout = () => {
         if (timeoutId) clearTimeout(timeoutId);
         timeoutId = setTimeout(() => {
@@ -175,7 +186,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               m.id === assistantId ? { ...m, isStreaming: false } : m,
             ),
           }));
-        }, 30000);
+        }, 60000);
       };
 
       resetTimeout();
@@ -193,6 +204,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
               messages: state.messages.map((m) =>
                 m.id === assistantId ? { ...m, sources: event.sources } : m,
               ),
+            }));
+            break;
+
+          case 'choice_prompt':
+            set((state) => ({
+              messages: state.messages.map((m) =>
+                m.id === assistantId
+                  ? { ...m, choicePrompt: event.prompt }
+                  : m,
+              ),
+            }));
+            break;
+
+          case 'task_update':
+            set((state) => ({
+              messages: state.messages.map((m) => {
+                if (m.id !== assistantId) return m;
+                const existing = m.tasks ?? [];
+                const updated = existing.some((t) => t.taskId === event.task.taskId)
+                  ? existing.map((t) =>
+                      t.taskId === event.task.taskId ? { ...t, ...event.task } : t,
+                    )
+                  : [...existing, event.task];
+                return { ...m, tasks: updated };
+              }),
             }));
             break;
 
@@ -253,6 +289,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ),
       }));
     }
+  },
+
+  /** P1: 用户回答结构化选择引导 */
+  sendChoiceResponse: async (messageId: string, selectedLabels: string[]) => {
+    // 标记该消息的选择引导已回答
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.id === messageId
+          ? { ...m, choiceAnswered: true, choiceResponse: selectedLabels }
+          : m,
+      ),
+    }));
+
+    // 构造选择文本作为下一轮对话的输入
+    const choiceText = `已选择: ${selectedLabels.join('、')}`;
+    await get().sendMessage(choiceText, undefined, selectedLabels);
   },
 
   clearMessages: () => {

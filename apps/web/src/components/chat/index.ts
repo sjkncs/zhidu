@@ -7,3 +7,7 @@ export { ChatInput } from './ChatInput';
 export { TypingIndicator } from './TypingIndicator';
 export { ChatSessionList } from './ChatSessionList';
 export { EditPanel } from './EditPanel';
+export { ChoicePrompt } from './ChoicePrompt';
+export { ActionItem, ActionItemGroup } from './ActionItem';
+export type { ActionItemData, ActionType } from './ActionItem';
+export { TaskProgress } from './TaskProgress';

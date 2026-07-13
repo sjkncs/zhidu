@@ -2,10 +2,12 @@
  * SSE 流解析器 — 解析 /api/ai/chat 返回的 Server-Sent Events 流
  *
  * 协议：
- *   data: {"type":"sources","sources":[...]}    → RAG 检索结果
- *   data: {"type":"content","delta":"..."}      → LLM 增量文本
- *   data: {"type":"error","error":"..."}        → 错误
- *   data: [DONE]                                → 流结束
+ *   data: {"type":"sources","sources":[...]}        → RAG 检索结果
+ *   data: {"type":"content","delta":"..."}          → LLM 增量文本
+ *   data: {"type":"choice_prompt",...}              → 结构化选择引导
+ *   data: {"type":"task_update",...}                → 任务进度更新
+ *   data: {"type":"error","error":"..."}            → 错误
+ *   data: [DONE]                                    → 流结束
  */
 
 export interface Source {
@@ -13,6 +15,27 @@ export interface Source {
   snippet: string;
   score: number;
   url?: string;
+}
+
+/** 选项卡片数据（P1: 结构化选择引导） */
+export interface ChoiceOption {
+  label: string;
+  description?: string;
+  icon?: string;
+}
+
+export interface ChoicePromptData {
+  question: string;
+  header?: string;
+  options: ChoiceOption[];
+  multiSelect?: boolean;
+}
+
+/** 任务进度数据（P3: 实时任务追踪） */
+export interface TaskUpdateData {
+  taskId: string;
+  description: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
 }
 
 export interface SourcesEvent {
@@ -23,6 +46,16 @@ export interface SourcesEvent {
 export interface ContentEvent {
   type: 'content';
   delta: string;
+}
+
+export interface ChoicePromptEvent {
+  type: 'choice_prompt';
+  prompt: ChoicePromptData;
+}
+
+export interface TaskUpdateEvent {
+  type: 'task_update';
+  task: TaskUpdateData;
 }
 
 export interface ErrorEvent {
@@ -39,7 +72,14 @@ export interface SessionEvent {
   sessionId: string;
 }
 
-export type SSEEvent = SourcesEvent | ContentEvent | ErrorEvent | DoneEvent | SessionEvent;
+export type SSEEvent =
+  | SourcesEvent
+  | ContentEvent
+  | ChoicePromptEvent
+  | TaskUpdateEvent
+  | ErrorEvent
+  | DoneEvent
+  | SessionEvent;
 
 /**
  * 异步生成器：从 ReadableStream 逐行解析 SSE 事件
@@ -88,6 +128,10 @@ export async function* parseSSEStream(
             yield { type: 'error', error: parsed.error };
           } else if (parsed.type === 'session' && typeof parsed.sessionId === 'string') {
             yield { type: 'session', sessionId: parsed.sessionId };
+          } else if (parsed.type === 'choice_prompt' && parsed.prompt?.question && Array.isArray(parsed.prompt.options)) {
+            yield { type: 'choice_prompt', prompt: parsed.prompt };
+          } else if (parsed.type === 'task_update' && parsed.task?.taskId && parsed.task?.status) {
+            yield { type: 'task_update', task: parsed.task };
           }
         } catch {
           // 跳过无法解析的行

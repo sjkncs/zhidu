@@ -32,7 +32,16 @@ interface OpenAIStreamDelta {
   id: string;
   choices: Array<{
     index: number;
-    delta: { role?: string; content?: string };
+    delta: {
+      role?: string;
+      content?: string;
+      tool_calls?: Array<{
+        index: number;
+        id?: string;
+        type?: string;
+        function?: { name?: string; arguments?: string };
+      }>;
+    };
     finish_reason: string | null;
   }>;
 }
@@ -85,13 +94,19 @@ async function* streamLLM(
 ): AsyncIterable<AIStreamChunk> {
   const { temperature = 0.7, maxTokens = 4096 } = options;
 
-  const body = {
+  const body: Record<string, unknown> = {
     model: options.model ?? config.model,
     messages,
     temperature,
     max_tokens: maxTokens,
     stream: true,
   };
+
+  // Function Calling: 传入工具定义
+  if (options.tools && options.tools.length > 0) {
+    body.tools = options.tools;
+    body.tool_choice = 'auto';
+  }
 
   const response = await fetch(`${config.baseUrl}/chat/completions`, {
     method: 'POST',
@@ -116,6 +131,9 @@ async function* streamLLM(
   let buffer = '';
   let fullContent = '';
 
+  // 追踪流式 tool_calls（按 index 累积）
+  const toolCallAccum = new Map<number, { id: string; name: string; arguments: string }>();
+
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -136,7 +154,48 @@ async function* streamLLM(
 
       try {
         const parsed = JSON.parse(data) as OpenAIStreamDelta;
-        const content = parsed.choices[0]?.delta?.content ?? '';
+        const choice = parsed.choices[0];
+        if (!choice) continue;
+
+        // 处理 tool_calls 增量
+        if (choice.delta.tool_calls) {
+          for (const tc of choice.delta.tool_calls) {
+            const existing = toolCallAccum.get(tc.index);
+            if (existing) {
+              // 增量追加 arguments
+              existing.arguments += tc.function?.arguments ?? '';
+              yield {
+                delta: '',
+                done: false,
+                toolCallDelta: {
+                  id: existing.id,
+                  name: existing.name,
+                  arguments: tc.function?.arguments ?? '',
+                },
+              };
+            } else {
+              // 新的 tool_call 开始
+              toolCallAccum.set(tc.index, {
+                id: tc.id ?? '',
+                name: tc.function?.name ?? '',
+                arguments: tc.function?.arguments ?? '',
+              });
+              yield {
+                delta: '',
+                done: false,
+                toolCallDelta: {
+                  id: tc.id ?? '',
+                  name: tc.function?.name ?? '',
+                  arguments: tc.function?.arguments ?? '',
+                },
+              };
+            }
+          }
+          continue; // tool_call chunk 不产出 content
+        }
+
+        // 处理常规 content
+        const content = choice.delta.content ?? '';
         if (content) {
           fullContent += content;
           yield { delta: content, done: false };

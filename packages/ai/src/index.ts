@@ -76,6 +76,8 @@ export interface AIStreamChunk {
   done: boolean;
   /** 完整响应（仅在 done=true 时有值） */
   final?: AIResponse;
+  /** Function Calling: 流式工具调用片段（增量拼接） */
+  toolCallDelta?: ToolCallDelta;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -138,6 +140,23 @@ export interface RAGService {
 // LLM 服务接口（大模型调用，支持流式）
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** 工具定义（OpenAI Function Calling 格式） */
+export interface ToolDefinition {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+}
+
+/** 流式工具调用片段 */
+export interface ToolCallDelta {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
 /** LLM 调用选项 */
 export interface LLMOptions {
   systemPrompt?: string;
@@ -145,6 +164,8 @@ export interface LLMOptions {
   maxTokens?: number;
   model?: string;
   jsonMode?: boolean;
+  /** Function Calling 工具列表 */
+  tools?: ToolDefinition[];
 }
 
 /** LLM 服务 — 大模型推理调用 */
@@ -234,6 +255,10 @@ export type { VolunteerQuery, MatchResult, VolunteerRecommendation } from './vol
 export { IntentClassifier, extractEntities } from './intent-classifier';
 export type { IntentClassification } from './intent-classifier';
 
+// Intent clarifier (P1: 结构化选择引导)
+export { IntentClarifier, createIntentClarifier } from './intent-clarifier';
+export type { ClarificationResult, ChoiceOption } from './intent-clarifier';
+
 // Structured query agent
 export { StructuredQueryAgent } from './structured-query-agent';
 export type {
@@ -257,6 +282,82 @@ export type { MLPredictInput, MLPredictResult } from './ml-predict-client';
 // User context gatherer
 export { gatherUserContext } from './user-context-gatherer';
 
+// Web search (P5: 外部知识增强)
+export { searchWeb, executeWebSearch, WEB_SEARCH_TOOL } from './web-search';
+export type { WebSearchResult, WebSearchParams } from './web-search';
+
 // Agent framework
 export { ToolRegistry, createDefaultRegistry, Planner, Executor } from './agent';
 export type { AgentTask, AgentStep, AgentPlan, ToolHandler, ToolDefinition } from './agent';
+
+// Agent tools (P3: run_tasks Function Calling)
+export { RUN_TASKS_TOOL, executeRunTasks, AVAILABLE_AGENT_TOOLS, VOLUNTEER_RECOMMEND_TOOL, executeVolunteerRecommend, INVESTMENT_ANALYZE_TOOL, executeInvestmentAnalyze } from './agent-tools';
+export type { TaskUpdateEvent } from './agent-tools';
+
+// PA_Agent pattern: 确定性决策节点引擎
+export { DecisionNodeEngine } from './decision-nodes';
+export type { DecisionNode, DecisionTrace, NodeOverride, GateCheck, GateResult, NodeAuthority } from './decision-nodes';
+
+// PA_Agent pattern: 连续性守卫
+export { ContinuityGuard } from './continuity-guard';
+export type { PreviousPlan, ContinuityCheckResult, Contradiction } from './continuity-guard';
+
+// PA_Agent pattern: 结构化决策树 Prompt
+export {
+  buildDecisionTreeSystemPrompt,
+  buildVolunteerUserPrompt,
+  buildNoRecommendationResponse,
+} from './decision-tree-prompt';
+
+// PA_Agent pattern: 推荐结果验证器
+export { RecommendationValidator, createDefaultBudget, canRetry } from './recommendation-validator';
+export type { ValidationError, ValidationResult, ValidationErrorCategory, RetryBudget } from './recommendation-validator';
+
+// PortfolioAgent: 独立资管智能体（3阶段流水线）
+export { PortfolioAgent } from './portfolio-agent';
+export type {
+  AnalysisMode, PortfolioAnalysisRequest, PortfolioAgentResult,
+  PositionData, PositionSignal, PortfolioAssessment, AgentRecommendation,
+} from './portfolio-agent';
+
+// Factor Library: 因子库 + 投资行为学知识库（PA_Agent + 栀染移植）
+export {
+  MARKET_FEATURES, MATH_OPERATORS, RL_REWARD_PARAMS,
+  VOTING_SIGNALS, synthesizeDirection,
+  riskParityOptimize, maxSharpeOptimize, blackLittermanPosterior, hierarchicalRiskParity,
+  calculateMarketImpact, estimateAUMCapacity, DEFAULT_IMPACT_PARAMS,
+  BEHAVIORAL_BIASES, detectBehavioralBiases,
+  STRATEGY_TEMPLATES,
+  robustNormalize, shrinkCovariance,
+} from './factor-library';
+export type {
+  PriceBar, VotingSignal,
+  OptimizerResult, MarketImpactParams,
+  BehavioralBias, TradingContext, StrategyTemplate,
+  FactorMarketFeature, FactorMathOperator,
+} from './factor-library';
+
+// Investment Analysis Engine: 资管模块 — 投资组合分析 / 多信号投票 / 因子挖掘 / DeFi 收益
+export { InvestmentAnalysisEngine, createInvestmentEngine } from './investment-engine';
+export type {
+  AssetQuery,
+  StockScreenCriteria,
+  InvestmentSignal,
+  InvestmentGateCheck,
+  InvestmentDecisionNode,
+  InvestmentDecisionTrace,
+  InvestmentNodeAuthority,
+  PositionAnalysis,
+  PortfolioRecommendation,
+  PortfolioAnalysis,
+  Factor,
+  MathOperator,
+  MarketFeature,
+  DeFiPoolData,
+  DeFiYieldAnalysis,
+  OHLCV,
+  MarketDataProvider,
+  PreviousRecommendation,
+  InvestmentContinuityResult,
+  InvestmentContradiction,
+} from './investment-engine';

@@ -114,8 +114,9 @@ ${bodyHtml}
 
       const data = await response.json();
 
-      // 拼接 WPS 在线编辑地址并打开
-      const wpsUrl = `https://kdocs.cn/l/new?file=${encodeURIComponent(data.url)}`;
+      // 使用 public URL（temp-edits 是公开 bucket），避免签名 URL 被 KDocs 拦截
+      const fileUrl = data.publicUrl || data.url;
+      const wpsUrl = `https://kdocs.cn/l/new?file=${encodeURIComponent(fileUrl)}`;
       window.open(wpsUrl, '_blank', 'noopener,noreferrer');
     } catch (err) {
       const msg = err instanceof Error ? err.message : '操作失败，请重试';

@@ -2,23 +2,25 @@
 
 import { useEffect } from 'react';
 
-const IS_DEV = typeof window !== 'undefined' &&
-  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-
 export function RegisterSW() {
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
 
+    // MUST be inside useEffect — module-level check runs during SSR where window is undefined
+    const IS_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
     // Development mode: unregister SW and clear caches to prevent stale bundles
     if (IS_DEV) {
-      navigator.serviceWorker.getRegistrations().then((regs) => {
-        regs.forEach((reg) => reg.unregister());
-      });
-      if ('caches' in window) {
-        caches.keys().then((keys) => {
-          keys.forEach((key) => caches.delete(key));
+      navigator.serviceWorker.getRegistrations()
+        .then((regs) => Promise.all(regs.map((reg) => reg.unregister())))
+        .catch(() => {})
+        .then(() => {
+          if ('caches' in window) {
+            caches.keys().then((keys) => {
+              keys.forEach((key) => caches.delete(key));
+            });
+          }
         });
-      }
       return;
     }
 

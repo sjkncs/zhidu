@@ -14,6 +14,8 @@ import {
   ArrowRight,
   Check,
   Cpu,
+  Wallet,
+  TrendingUp,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -464,6 +466,48 @@ function RecentOrdersSection({ orders }: { orders: Order[] }) {
 // Main Component
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Fund Quick Link (跨模块联动: 账单 ↔ 资管)
+// ---------------------------------------------------------------------------
+
+function FundQuickLink() {
+  const [summary, setSummary] = useState<{ totalBalance: number; accountCount: number } | null>(null);
+
+  useEffect(() => {
+    fetch('/api/fund/account')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.summary) setSummary(data.summary);
+      })
+      .catch(() => {});
+  }, []);
+
+  return (
+    <a
+      href="/dashboard/portfolio"
+      className="flex items-center justify-between rounded-xl border border-border bg-gradient-to-r from-blue/[0.04] to-purple-500/[0.04] p-5 transition hover:border-blue/30"
+    >
+      <div className="flex items-center gap-4">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue/10">
+          <Wallet className="h-5 w-5 text-blue" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-text-primary">投资资金管理</p>
+          <p className="text-xs text-text-secondary">
+            {summary && summary.accountCount > 0
+              ? `${summary.accountCount} 个账户 · 总余额 ¥${(summary.totalBalance / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}`
+              : '管理资金账户、入金出金、投资流水'}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <TrendingUp className="h-4 w-4 text-text-tertiary" />
+        <ArrowRight className="h-4 w-4 text-text-tertiary" />
+      </div>
+    </a>
+  );
+}
+
 export default function BillingPage() {
   const [data, setData] = useState<BillingOverview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -595,6 +639,9 @@ export default function BillingPage() {
         <SubscriptionCard subscription={subscription} />
         <CreditsCard credits={credits} />
       </div>
+
+      {/* Fund Account Quick Link */}
+      <FundQuickLink />
 
       {/* Module usage */}
       <ModuleUsageSection modules={moduleUsage} />

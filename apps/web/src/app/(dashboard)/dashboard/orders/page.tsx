@@ -12,6 +12,8 @@ import {
   FileText,
   CreditCard,
   ExternalLink,
+  Wallet,
+  ArrowRight,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -279,14 +281,24 @@ export default function OrdersPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       {/* Page header */}
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue/10">
-          <ShoppingBag className="h-5 w-5 text-blue" />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue/10">
+            <ShoppingBag className="h-5 w-5 text-blue" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-text-primary">订单记录</h1>
+            <p className="text-sm text-text-secondary">查看所有交易与支付记录</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-xl font-bold text-text-primary">订单记录</h1>
-          <p className="text-sm text-text-secondary">查看所有交易与支付记录</p>
-        </div>
+        <a
+          href="/dashboard/portfolio"
+          className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs text-text-secondary transition hover:border-blue/30 hover:text-blue"
+        >
+          <Wallet className="h-3.5 w-3.5" />
+          资金账户
+          <ArrowRight className="h-3 w-3" />
+        </a>
       </div>
 
       {/* Filter tabs */}

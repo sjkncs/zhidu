@@ -22,6 +22,7 @@ import {
   StickyNote,
   Clock,
   Wallet,
+  TrendingUp,
   CreditCard,
   ShoppingBag,
   Sun,
@@ -69,6 +70,7 @@ const navItems: NavItem[] = [
   { icon: StickyNote, label: '备忘', href: '/dashboard/memo' },
   { icon: Clock, label: '时间', href: '/dashboard/time' },
   { icon: Wallet, label: '财务', href: '/dashboard/finance' },
+  { icon: TrendingUp, label: '资管', href: '/dashboard/portfolio' },
   { icon: CreditCard, label: '账单中心', href: '/dashboard/billing' },
   { icon: ShoppingBag, label: '订单记录', href: '/dashboard/orders' },
   // ── 企业管理 ──
@@ -249,6 +251,7 @@ function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
       memo: '备忘',
       time: '时间',
       finance: '财务',
+      portfolio: '资管',
       billing: '账单中心',
       llm: 'AI 服务管理',
       orders: '订单记录',

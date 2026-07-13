@@ -1,8 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { Bell, Check, CheckCheck } from 'lucide-react';
 import Link from 'next/link';
+
+// Module-level dedup: prevent requests more frequent than 30s
+let lastFetchTime = 0;
+let lastFetchResult: { data: any[]; unreadCount: number } | null = null;
+const FETCH_DEDUP_MS = 30_000;
 
 interface Notification {
   id: string;
@@ -35,29 +40,41 @@ const typeStyles: Record<string, string> = {
   system: 'bg-slate-500/10 text-slate-600',
 };
 
-export function NotificationBell() {
+export const NotificationBell = memo(function NotificationBell() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Fetch notifications
-  const fetchNotifications = async () => {
+  // Fetch notifications with dedup guard
+  const fetchNotifications = useCallback(async () => {
+    const now = Date.now();
+    // Skip if fetched recently and use cached result
+    if (now - lastFetchTime < FETCH_DEDUP_MS && lastFetchResult) {
+      setNotifications(lastFetchResult.data);
+      setUnreadCount(lastFetchResult.unreadCount);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const res = await fetch('/api/notifications?limit=10');
       if (res.ok) {
         const json = await res.json();
-        setNotifications(json.data ?? []);
-        setUnreadCount(json.unreadCount ?? 0);
+        const data = json.data ?? [];
+        const count = json.unreadCount ?? 0;
+        setNotifications(data);
+        setUnreadCount(count);
+        lastFetchTime = now;
+        lastFetchResult = { data, unreadCount: count };
       }
     } catch {
       // silently fail
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   // Fetch on mount and when panel opens
   useEffect(() => {
@@ -65,7 +82,7 @@ export function NotificationBell() {
     // Poll every 60 seconds
     const interval = setInterval(fetchNotifications, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchNotifications]);
 
   // Close on outside click
   useEffect(() => {
@@ -80,25 +97,33 @@ export function NotificationBell() {
   }, [isOpen]);
 
   const handleMarkRead = async (id: string) => {
-    await fetch('/api/notifications', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'markRead', notificationId: id }),
-    });
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)),
-    );
-    setUnreadCount((prev) => Math.max(0, prev - 1));
+    try {
+      await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'markRead', notificationId: id }),
+      });
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)),
+      );
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    } catch (err) {
+      console.warn('[NotificationBell] Failed to mark read:', err);
+    }
   };
 
   const handleMarkAllRead = async () => {
-    await fetch('/api/notifications', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'markAllRead' }),
-    });
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-    setUnreadCount(0);
+    try {
+      await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'markAllRead' }),
+      });
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      setUnreadCount(0);
+    } catch (err) {
+      console.warn('[NotificationBell] Failed to mark all read:', err);
+    }
   };
 
   return (
@@ -194,4 +219,4 @@ export function NotificationBell() {
       )}
     </div>
   );
-}
+});
