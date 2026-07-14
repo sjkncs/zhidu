@@ -286,6 +286,10 @@ export { gatherUserContext } from './user-context-gatherer';
 export { searchWeb, executeWebSearch, WEB_SEARCH_TOOL } from './web-search';
 export type { WebSearchResult, WebSearchParams } from './web-search';
 
+// arXiv 论文追踪（学术雷达模块）
+export { fetchArxivPapers, upsertPapers, DEFAULT_CATEGORIES } from './arxiv-service';
+export type { ArxivPaper, ArxivSearchParams } from './arxiv-service';
+
 // Agent framework
 export { ToolRegistry, createDefaultRegistry, Planner, Executor } from './agent';
 export type { AgentTask, AgentStep, AgentPlan, ToolHandler, ToolDefinition } from './agent';

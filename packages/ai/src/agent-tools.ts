@@ -33,19 +33,20 @@ export const INVESTMENT_ANALYZE_TOOL: FCToolDefinition = {
   type: 'function',
   function: {
     name: 'investment_analyze',
-    description: 'AI驱动的投资分析工具。支持个股/币种分析、组合诊断、选股筛选、DeFi收益评估。当用户询问投资建议、持仓分析、市场判断时调用。',
+    description: 'AI驱动的投资分析工具。支持个股/币种分析、组合诊断、选股筛选、DeFi收益评估、量化因子挖掘。当用户询问投资建议、持仓分析、市场判断、因子分析时调用。',
     parameters: {
       type: 'object',
       properties: {
         action: {
           type: 'string',
-          enum: ['analyze_asset', 'analyze_portfolio', 'screen_stocks', 'defi_yield'],
-          description: '分析类型：analyze_asset=个股/币种分析, analyze_portfolio=组合诊断, screen_stocks=选股筛选, defi_yield=DeFi收益',
+          enum: ['analyze_asset', 'analyze_portfolio', 'screen_stocks', 'defi_yield', 'mine_factors'],
+          description: '分析类型：analyze_asset=个股/币种分析, analyze_portfolio=组合诊断, screen_stocks=选股筛选, defi_yield=DeFi收益, mine_factors=量化因子挖掘',
         },
         symbol: { type: 'string', description: '资产代码（如 600519, AAPL, BTC）' },
         market: { type: 'string', enum: ['A股', '港股', '美股', 'BTC', 'ETH', 'SOL', 'DeFi', 'other'], description: '市场类型' },
         portfolioId: { type: 'string', description: '投资组合ID（用于 analyze_portfolio）' },
         criteria: { type: 'string', description: '选股条件描述（用于 screen_stocks）' },
+        topN: { type: 'number', description: '返回前N个因子（用于 mine_factors，默认10）' },
       },
       required: ['action'],
     },
@@ -93,6 +94,42 @@ export const CALCULATE_TOOL: FCToolDefinition = {
   },
 };
 
+export const PORTFOLIO_MANAGE_TOOL: FCToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'portfolio_manage',
+    description: '高级投资组合管理工具。支持组合诊断优化、行为偏差检测、策略模板匹配。当用户需要深度组合分析、仓位优化建议、行为偏差纠正时调用。',
+    parameters: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['diagnose', 'optimize', 'behavioral_check', 'strategy_match'],
+          description: '操作类型：diagnose=组合诊断, optimize=仓位优化, behavioral_check=行为偏差检测, strategy_match=策略模板匹配',
+        },
+        portfolioId: { type: 'string', description: '投资组合ID' },
+        positions: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              symbol: { type: 'string', description: '资产代码' },
+              name: { type: 'string', description: '资产名称' },
+              market: { type: 'string', description: '市场' },
+              quantity: { type: 'number', description: '持仓数量' },
+              avgCost: { type: 'number', description: '平均成本' },
+              currentPrice: { type: 'number', description: '当前价格' },
+            },
+          },
+          description: '持仓列表（如未提供portfolioId则使用）',
+        },
+        riskTolerance: { type: 'string', enum: ['conservative', 'moderate', 'aggressive'], description: '风险偏好' },
+      },
+      required: ['action'],
+    },
+  },
+};
+
 export const RUN_TASKS_TOOL: FCToolDefinition = {
   type: 'function',
   function: {
@@ -122,6 +159,7 @@ export const RUN_TASKS_TOOL: FCToolDefinition = {
                   'analysis_run',
                   'volunteer_recommend',
                   'investment_analyze',
+                  'portfolio_manage',
                   'web_search',
                   'calculate',
                 ],
@@ -161,8 +199,9 @@ export const AVAILABLE_AGENT_TOOLS = `可用工具列表：
 - analysis_run: 运行数据分析（参数: analysis 类型"gpa"或"finance"）
 - volunteer_recommend: 生成冲稳保志愿方案（参数: score 分数, province 省份, subjectType 科类）
 - investment_analyze: AI投资分析（参数: action 类型, symbol 代码, market 市场）
+- portfolio_manage: 高级组合管理（参数: action 类型, positions 持仓, riskTolerance 风险偏好）
 - web_search: 搜索互联网获取最新信息（参数: query 搜索关键词）
-- calculate: 数学计算（参数: expression 表达式, description 说明）`;
+- calculate: 数学计算（参数: operation 类型, expression 表达式）`;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 执行引擎
@@ -617,6 +656,7 @@ function inferTaskType(tool: string): AgentTask['type'] {
     case 'university_query':
     case 'analysis_run':
     case 'investment_analyze':
+    case 'portfolio_manage':
     case 'web_search':
     case 'calculate':
       return 'query';
@@ -743,7 +783,155 @@ export async function executeInvestmentAnalyze(
       ].join('\n');
     }
 
+    case 'mine_factors': {
+      if (!args.symbol || !args.market) {
+        return '请提供资产代码和市场类型（如 symbol="600519", market="A股"）';
+      }
+      const topN = args.topN ?? 10;
+      const factors = await engine.mineFactors(args.symbol, args.market, topN);
+      if (factors.length === 0) {
+        return `未能为 ${args.symbol}（${args.market}）挖掘到有效因子。可能是数据不足或市场特征不明显。`;
+      }
+      const lines = [`## 量化因子挖掘结果: ${args.symbol}（${args.market}）`, '', `共挖掘 **${factors.length}** 个有效因子（按夏普比率排序）：`, ''];
+      for (const f of factors) {
+        lines.push(`- **${f.name}** | 夏普: ${f.sharpe.toFixed(3)} | 最大回撤: ${(f.maxDrawdown * 100).toFixed(1)}% | 胜率: ${(f.winRate * 100).toFixed(1)}%`);
+      }
+      lines.push('', '### 解读建议');
+      lines.push('- 夏普比率 > 1.5 的因子具有较强预测能力');
+      lines.push('- 关注因子之间的相关性，避免多重共线性');
+      lines.push('- 高胜率 + 低回撤的因子适合稳健型策略');
+      lines.push('', '请基于以上因子数据为用户提供量化策略建议和风险提示。');
+      return lines.join('\n');
+    }
+
     default:
-      return `不支持的分析类型: ${args.action}。可选: analyze_asset, analyze_portfolio, screen_stocks, defi_yield`;
+      return `不支持的分析类型: ${args.action}。可选: analyze_asset, analyze_portfolio, screen_stocks, defi_yield, mine_factors`;
+  }
+}
+
+/**
+ * 执行 portfolio_manage 工具调用
+ * 包装 PortfolioAgent 三阶段流水线：Gate Check → 信号分析 → 策略推荐
+ */
+export async function executePortfolioManage(
+  args: {
+    action: string;
+    portfolioId?: string;
+    positions?: Array<{ symbol: string; name: string; market: string; quantity: number; avgCost: number; currentPrice: number }>;
+    riskTolerance?: string;
+  },
+  userId: string,
+  db: any,
+): Promise<string> {
+  const { PortfolioAgent } = await import('./portfolio-agent');
+  const agent = new PortfolioAgent();
+
+  // 加载持仓数据
+  let positions = args.positions;
+  if (!positions || positions.length === 0) {
+    try {
+      const query = args.portfolioId
+        ? db.from('positions').select('*').eq('portfolio_id', args.portfolioId).eq('user_id', userId)
+        : db.from('positions').select('*, portfolios!inner(id)').eq('user_id', userId).limit(50);
+      const { data } = await query;
+      if (data?.length) {
+        positions = data.map((p: any) => ({
+          symbol: p.symbol,
+          name: p.name || p.symbol,
+          market: p.market,
+          quantity: p.quantity,
+          avgCost: p.avg_cost,
+          currentPrice: p.current_price,
+        }));
+      }
+    } catch {
+      positions = [];
+    }
+  }
+
+  if (!positions || positions.length === 0) {
+    return '用户暂无持仓数据。请先在资管页面添加持仓，或提供 positions 参数。';
+  }
+
+  try {
+    const result = await agent.analyze({
+      userId,
+      mode: args.action === 'optimize' ? 'rebalance_plan'
+        : args.action === 'behavioral_check' ? 'full_diagnosis'
+        : args.action === 'strategy_match' ? 'full_diagnosis'
+        : 'quick_scan',
+      db,
+      portfolioId: args.portfolioId,
+      positions: positions.map(p => ({
+        symbol: p.symbol,
+        name: p.name,
+        market: p.market,
+        quantity: p.quantity,
+        avgCost: p.avgCost,
+        currentPrice: p.currentPrice,
+        marketValue: p.quantity * p.currentPrice,
+        pnl: (p.currentPrice - p.avgCost) * p.quantity,
+        pnlPercent: p.avgCost > 0 ? ((p.currentPrice - p.avgCost) / p.avgCost) * 100 : 0,
+      })),
+    });
+
+    // 格式化结果
+    const assessment = result.portfolioAssessment;
+    const lines = [
+      `## 组合${args.action === 'optimize' ? '优化' : args.action === 'behavioral_check' ? '行为诊断' : args.action === 'strategy_match' ? '策略匹配' : '诊断'}报告`,
+      '',
+      `### 组合概览`,
+      `- 总市值: ¥${assessment.totalValue.toLocaleString()}`,
+      `- 总收益: ¥${assessment.totalReturn.toLocaleString()}（${assessment.returnPct.toFixed(2)}%）`,
+      `- 夏普比率: ${assessment.sharpeRatio.toFixed(3)}`,
+      `- 最大回撤: ${(assessment.maxDrawdown * 100).toFixed(2)}%`,
+      `- 分散度: ${(assessment.diversification * 100).toFixed(1)}%`,
+      `- 风险等级: ${assessment.riskLevel}`,
+      '',
+    ];
+
+    // 个股信号
+    if (result.positionSignals.length > 0) {
+      lines.push('### 持仓信号');
+      for (const ps of result.positionSignals) {
+        lines.push(`- **${ps.name}**（${ps.symbol}）: ${ps.signal.tier} | 综合信号 ${ps.signal.signalScore > 0 ? '+' : ''}${ps.signal.signalScore} | 建议: ${ps.action}`);
+      }
+      lines.push('');
+    }
+
+    // 推荐操作
+    if (result.recommendations.length > 0) {
+      lines.push('### 操作建议');
+      for (const rec of result.recommendations) {
+        lines.push(`- [${rec.urgency.toUpperCase()}] **${rec.type}** ${rec.name}: ${rec.reason}（置信度 ${(rec.confidence * 100).toFixed(0)}%）`);
+      }
+      lines.push('');
+    }
+
+    // 行为偏差
+    if (result.behavioralBiases.length > 0) {
+      lines.push('### 行为偏差检测');
+      for (const bias of result.behavioralBiases) {
+        lines.push(`- **${bias.biasNameCN}**（严重度 ${(bias.severity * 100).toFixed(0)}%）: ${bias.evidence}`);
+        lines.push(`  - 缓解建议: ${bias.mitigation}`);
+      }
+      lines.push('');
+    }
+
+    // 匹配策略
+    if (result.matchedStrategies.length > 0) {
+      lines.push('### 匹配策略模板');
+      for (const strat of result.matchedStrategies) {
+        lines.push(`- **${strat.nameCN}**（${strat.regime}）: ${strat.rules.join('；')}`);
+      }
+      lines.push('');
+    }
+
+    lines.push(`整体置信度: ${(result.overallConfidence * 100).toFixed(0)}%`);
+    lines.push('', '请基于以上分析为用户提供详细的投资建议和风险提示。');
+
+    return lines.join('\n');
+  } catch (e) {
+    return `组合分析执行失败: ${e instanceof Error ? e.message : '未知错误'}`;
   }
 }

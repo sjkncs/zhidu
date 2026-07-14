@@ -164,6 +164,26 @@ const calculateTool: ToolHandler = async (params) => {
   }
 };
 
+const portfolioManage: ToolHandler = async (params, userId, db) => {
+  const action = params.action as string;
+  if (!action) return '请提供操作类型 (diagnose / optimize / behavioral_check / strategy_match)';
+  try {
+    const { executePortfolioManage } = await import('../agent-tools');
+    return await executePortfolioManage(
+      {
+        action,
+        portfolioId: params.portfolioId as string,
+        positions: params.positions as any,
+        riskTolerance: params.riskTolerance as string,
+      },
+      userId,
+      db,
+    );
+  } catch (e) {
+    return `组合管理执行失败: ${e instanceof Error ? e.message : String(e)}`;
+  }
+};
+
 // 创建预注册工具注册表
 export function createDefaultRegistry(): ToolRegistry {
   const registry = new ToolRegistry();
@@ -177,5 +197,6 @@ export function createDefaultRegistry(): ToolRegistry {
   registry.register({ name: 'investment_analyze', description: 'AI投资分析（个股/组合/选股）', handler: investmentAnalyze });
   registry.register({ name: 'web_search', description: '搜索互联网获取最新信息', handler: webSearchTool });
   registry.register({ name: 'calculate', description: '执行数学计算（四则运算、复利、百分比等）', handler: calculateTool });
+  registry.register({ name: 'portfolio_manage', description: '高级组合管理（诊断/优化/行为偏差/策略匹配）', handler: portfolioManage });
   return registry;
 }
