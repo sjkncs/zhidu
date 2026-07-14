@@ -24,6 +24,7 @@ export interface ArxivSearchParams {
   start?: number;              // 分页偏移
   sortBy?: 'lastUpdatedDate' | 'submittedDate' | 'relevance';
   sortOrder?: 'ascending' | 'descending';
+  searchAll?: boolean;         // 搜索所有领域（不限分类）
 }
 
 // arXiv 默认关注分类（AI + 量化金融 + 交叉科学）
@@ -57,13 +58,14 @@ export async function fetchArxivPapers(params: ArxivSearchParams = {}): Promise<
     start = 0,
     sortBy = 'lastUpdatedDate',
     sortOrder = 'descending',
+    searchAll = false,
   } = params;
 
   // 构建查询字符串
   const queryParts: string[] = [];
 
-  // 分类过滤
-  if (categories.length > 0) {
+  // 分类过滤（searchAll 模式跳过分类限制）
+  if (!searchAll && categories.length > 0) {
     const catQuery = categories.map(c => `cat:${c}`).join(' OR ');
     queryParts.push(`(${catQuery})`);
   }
@@ -74,9 +76,14 @@ export async function fetchArxivPapers(params: ArxivSearchParams = {}): Promise<
     queryParts.push(`(${kwQuery})`);
   }
 
-  // 默认查询：如果无分类无关键词，查 AI + 量化金融最新论文
-  if (queryParts.length === 0) {
+  // 默认查询：如果无分类无关键词且非 searchAll，查 AI + 量化金融最新论文
+  if (queryParts.length === 0 && !searchAll) {
     queryParts.push('(cat:cs.AI OR cat:cs.LG OR cat:stat.ML OR cat:q-fin.ST)');
+  }
+
+  // searchAll 模式且无关键词：匹配所有论文（用 ti:* 作为通配）
+  if (searchAll && keywords.length === 0) {
+    queryParts.push('all:""');  // arXiv API: 空查询返回最新论文
   }
 
   const searchQuery = queryParts.join(' AND ');

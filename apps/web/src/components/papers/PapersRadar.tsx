@@ -5,6 +5,7 @@ import {
   Search, RefreshCw, Bookmark, BookOpen, ExternalLink,
   FileText, Brain, ChevronDown, ChevronRight, Tag, Star,
   Satellite, TrendingUp, FlaskConical, Briefcase, X, Loader2,
+  Globe,
 } from 'lucide-react';
 
 // ─── 类型 ───────────────────────────────────────────────────────────────
@@ -41,7 +42,8 @@ interface Pagination {
 // ─── 分类配置 ───────────────────────────────────────────────────────────
 
 const CATEGORY_GROUPS = [
-  { label: '全部', value: '', icon: Satellite },
+  { label: '默认', value: '', icon: Satellite },
+  { label: '全领域', value: '__all__', icon: Globe },
   { label: 'AI/ML', value: 'cs.AI,cs.LG,cs.CL,stat.ML', icon: Brain },
   { label: '量化金融', value: 'q-fin.ST,q-fin.CP,q-fin.PM,q-fin.TR', icon: TrendingUp },
   { label: '数学/统计', value: 'math.OC,math.PR,stat.ML', icon: FileText },
@@ -61,6 +63,8 @@ export default function PapersRadar() {
   const [selectedPaper, setSelectedPaper] = useState<Paper | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [page, setPage] = useState(1);
+  const [customCategory, setCustomCategory] = useState('');
+  const [showCustomInput, setShowCustomInput] = useState(false);
 
   // 加载论文列表
   const fetchPapers = useCallback(async () => {
@@ -68,7 +72,11 @@ export default function PapersRadar() {
     try {
       const params = new URLSearchParams();
       if (query) params.set('q', query);
-      if (activeCategory) params.set('category', activeCategory);
+      // 处理分类过滤
+      const effectiveCategory = activeCategory === '__custom__' ? customCategory
+        : activeCategory === '__all__' ? ''
+        : activeCategory;
+      if (effectiveCategory) params.set('category', effectiveCategory);
       params.set('page', String(page));
       params.set('limit', '20');
 
@@ -83,7 +91,7 @@ export default function PapersRadar() {
     } finally {
       setLoading(false);
     }
-  }, [query, activeCategory, page]);
+  }, [query, activeCategory, customCategory, page]);
 
   useEffect(() => {
     fetchPapers();
@@ -93,12 +101,16 @@ export default function PapersRadar() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const categories = activeCategory ? activeCategory.split(',') : undefined;
+      const isSearchAll = activeCategory === '__all__';
+      const effectiveCategory = activeCategory === '__custom__' ? customCategory
+        : activeCategory === '__all__' ? ''
+        : activeCategory;
+      const categories = effectiveCategory ? effectiveCategory.split(',').map(c => c.trim()) : undefined;
       const keywords = query ? [query] : undefined;
       const res = await fetch('/api/papers/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ categories, keywords, maxResults: 50 }),
+        body: JSON.stringify({ categories, keywords, maxResults: 50, searchAll: isSearchAll }),
       });
       const json = await res.json();
       if (json.success) {
@@ -185,14 +197,14 @@ export default function PapersRadar() {
       </div>
 
       {/* 分类标签 */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {CATEGORY_GROUPS.map(cat => {
           const Icon = cat.icon;
           const isActive = activeCategory === cat.value;
           return (
             <button
               key={cat.label}
-              onClick={() => { setActiveCategory(cat.value); setPage(1); }}
+              onClick={() => { setActiveCategory(cat.value); setShowCustomInput(false); setPage(1); }}
               className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                 isActive
                   ? 'bg-violet/15 text-violet border border-violet/30'
@@ -204,7 +216,39 @@ export default function PapersRadar() {
             </button>
           );
         })}
+        {/* 自定义分类按钮 */}
+        <button
+          onClick={() => { setShowCustomInput(!showCustomInput); setActiveCategory('__custom__'); setPage(1); }}
+          className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+            activeCategory === '__custom__'
+              ? 'bg-violet/15 text-violet border border-violet/30'
+              : 'bg-surface-elevated/50 text-text-secondary border border-transparent hover:border-border'
+          }`}
+        >
+          <Tag className="h-3 w-3" />
+          自定义
+        </button>
       </div>
+
+      {/* 自定义分类输入 */}
+      {showCustomInput && (
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={customCategory}
+            onChange={(e) => setCustomCategory(e.target.value)}
+            placeholder="输入 arXiv 分类代码，如 hep-th, astro-ph.CO, nlin.CD（逗号分隔多个）"
+            className="flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-text-primary placeholder:text-text-tertiary focus:border-violet focus:outline-none"
+          />
+          <button
+            onClick={() => { setActiveCategory(customCategory); setPage(1); }}
+            disabled={!customCategory.trim()}
+            className="rounded-lg bg-violet/10 px-3 py-1.5 text-xs font-medium text-violet transition-colors hover:bg-violet/20 disabled:opacity-40"
+          >
+            应用
+          </button>
+        </div>
+      )}
 
       {/* 统计信息 */}
       {pagination && (

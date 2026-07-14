@@ -36,7 +36,8 @@ export async function POST(request: NextRequest) {
 
     // 解析请求参数
     const body = await request.json().catch(() => ({}));
-    const categories: string[] = body.categories || DEFAULT_CATEGORIES.slice(0, 10);
+    const searchAll: boolean = body.searchAll === true;
+    const categories: string[] = body.categories || (searchAll ? [] : DEFAULT_CATEGORIES.slice(0, 10));
     const keywords: string[] = body.keywords || [];
     const maxResults = Math.min(100, Math.max(10, body.maxResults || 50));
 
@@ -47,6 +48,7 @@ export async function POST(request: NextRequest) {
       maxResults,
       sortBy: 'lastUpdatedDate',
       sortOrder: 'descending',
+      searchAll,
     });
 
     if (papers.length === 0) {
