@@ -111,6 +111,59 @@ const analysisRun: ToolHandler = async (params, userId, db) => {
   }
 };
 
+const volunteerRecommend: ToolHandler = async (params, userId, db) => {
+  const score = params.score as number;
+  const province = params.province as string;
+  if (!score || !province) return '志愿推荐需要分数和省份信息';
+  try {
+    const { executeVolunteerRecommend } = await import('../agent-tools');
+    return await executeVolunteerRecommend(
+      { score, province, subjectType: (params.subjectType as string) ?? '物理类' },
+      userId,
+      db,
+    );
+  } catch (e) {
+    return `志愿推荐执行失败: ${e instanceof Error ? e.message : String(e)}`;
+  }
+};
+
+const investmentAnalyze: ToolHandler = async (params, userId, db) => {
+  const action = params.action as string;
+  if (!action) return '请提供分析类型 (analyze_asset / analyze_portfolio / screen_stocks)';
+  try {
+    const { executeInvestmentAnalyze } = await import('../agent-tools');
+    return await executeInvestmentAnalyze(
+      { action, symbol: params.symbol as string, market: params.market as string },
+      userId,
+      db,
+    );
+  } catch (e) {
+    return `投资分析执行失败: ${e instanceof Error ? e.message : String(e)}`;
+  }
+};
+
+const webSearchTool: ToolHandler = async (params) => {
+  const query = params.query as string;
+  if (!query) return '请提供搜索关键词';
+  try {
+    const { searchWeb } = await import('../web-search');
+    const results = await searchWeb({ query, maxResults: 5 });
+    if (!results.length) return '未找到相关网页结果';
+    return results.map((r, i) => `[${i + 1}] ${r.title}\n    ${r.snippet}\n    来源: ${r.url}`).join('\n\n');
+  } catch (e) {
+    return `网页搜索失败: ${e instanceof Error ? e.message : String(e)}`;
+  }
+};
+
+const calculateTool: ToolHandler = async (params) => {
+  try {
+    const { executeCalculate } = await import('../agent-tools');
+    return await executeCalculate(params);
+  } catch (e) {
+    return `计算执行失败: ${e instanceof Error ? e.message : String(e)}`;
+  }
+};
+
 // 创建预注册工具注册表
 export function createDefaultRegistry(): ToolRegistry {
   const registry = new ToolRegistry();
@@ -120,5 +173,9 @@ export function createDefaultRegistry(): ToolRegistry {
   registry.register({ name: 'memo_create', description: '为用户创建备忘', handler: memoCreate });
   registry.register({ name: 'schedule_create', description: '为用户创建日程', handler: scheduleCreate });
   registry.register({ name: 'analysis_run', description: '运行数据分析（GPA/财务等）', handler: analysisRun });
+  registry.register({ name: 'volunteer_recommend', description: '根据分数和省份生成冲稳保志愿方案', handler: volunteerRecommend });
+  registry.register({ name: 'investment_analyze', description: 'AI投资分析（个股/组合/选股）', handler: investmentAnalyze });
+  registry.register({ name: 'web_search', description: '搜索互联网获取最新信息', handler: webSearchTool });
+  registry.register({ name: 'calculate', description: '执行数学计算（四则运算、复利、百分比等）', handler: calculateTool });
   return registry;
 }

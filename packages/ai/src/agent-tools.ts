@@ -52,6 +52,47 @@ export const INVESTMENT_ANALYZE_TOOL: FCToolDefinition = {
   },
 };
 
+export const CALCULATE_TOOL: FCToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'calculate',
+    description: '数学与物理计算引擎。支持：四则运算、方程求解、方程组、微积分（求导/定积分/不定积分）、极限、泰勒展开、矩阵运算（行列式/逆矩阵/特征值）、物理公式（运动学/能量/电路/光学/气体定律）。',
+    parameters: {
+      type: 'object',
+      properties: {
+        operation: {
+          type: 'string',
+          enum: [
+            'evaluate', 'solve', 'solve_system',
+            'derivative', 'integral', 'limit', 'series',
+            'matrix', 'physics',
+          ],
+          description: '计算类型。evaluate=数值计算, solve=方程求解, solve_system=方程组, derivative=求导, integral=积分, limit=极限, series=泰勒展开, matrix=矩阵运算, physics=物理公式',
+          default: 'evaluate',
+        },
+        expression: { type: 'string', description: '数学表达式（evaluate/derivative/integral/limit/series 时使用）' },
+        equation: { type: 'string', description: '方程（solve 时用），如 "x**2 - 5*x + 6"' },
+        equations: { type: 'array', items: { type: 'string' }, description: '方程组（solve_system 时用）' },
+        variable: { type: 'string', description: '变量名（默认 x）' },
+        variables: { type: 'array', items: { type: 'string' }, description: '变量列表（solve_system 时用）' },
+        lower: { type: 'string', description: '积分下限（integral 时用）' },
+        upper: { type: 'string', description: '积分上限（integral 时用）' },
+        point: { type: 'string', description: '极限/展开点（limit/series 时用）' },
+        order: { type: 'number', description: '展开阶数（series 时用，默认 6）' },
+        matrix_operation: { type: 'string', enum: ['det', 'inv', 'eigenvalues', 'multiply', 'add', 'rref'], description: '矩阵操作类型' },
+        matrices: { type: 'object', description: '矩阵数据，如 {"A": [[1,2],[3,4]]}' },
+        formula: {
+          type: 'string',
+          enum: ['kinematics_v', 'kinematics_s', 'kinetic_energy', 'potential_energy', 'ohms_law', 'power', 'coulomb', 'lens', 'ideal_gas', 'snell'],
+          description: '物理公式类型',
+        },
+        params: { type: 'object', description: '物理公式参数，如 {"m": 2, "v": 10}' },
+        description: { type: 'string', description: '计算目的说明（可选）' },
+      },
+    },
+  },
+};
+
 export const RUN_TASKS_TOOL: FCToolDefinition = {
   type: 'function',
   function: {
@@ -80,6 +121,9 @@ export const RUN_TASKS_TOOL: FCToolDefinition = {
                   'schedule_create',
                   'analysis_run',
                   'volunteer_recommend',
+                  'investment_analyze',
+                  'web_search',
+                  'calculate',
                 ],
                 description: '要调用的工具名称',
               },
@@ -114,7 +158,11 @@ export const AVAILABLE_AGENT_TOOLS = `可用工具列表：
 - todo_create: 创建待办事项（参数: title 标题, priority 优先级, due_date 截止日期）
 - memo_create: 创建备忘（参数: title 标题, content 内容）
 - schedule_create: 创建日程（参数: title 标题, start_time 开始时间, end_time 结束时间）
-- analysis_run: 运行数据分析（参数: analysis 类型"gpa"或"finance"）`;
+- analysis_run: 运行数据分析（参数: analysis 类型"gpa"或"finance"）
+- volunteer_recommend: 生成冲稳保志愿方案（参数: score 分数, province 省份, subjectType 科类）
+- investment_analyze: AI投资分析（参数: action 类型, symbol 代码, market 市场）
+- web_search: 搜索互联网获取最新信息（参数: query 搜索关键词）
+- calculate: 数学计算（参数: expression 表达式, description 说明）`;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 执行引擎
@@ -348,6 +396,220 @@ export async function executeVolunteerRecommend(
   ].join('\n');
 }
 
+/**
+ * 执行 calculate 工具调用
+ * 策略：简单算术本地求值（快速），复杂运算调用 Python 计算引擎（SymPy/SciPy）
+ */
+export async function executeCalculate(args: Record<string, any>): Promise<string> {
+  const operation = (args.operation as string) || 'evaluate';
+  const desc = args.description ? `（${args.description}）` : '';
+
+  // 简单算术：本地快速求值（不需要 Python 服务）
+  if (operation === 'evaluate' && args.expression) {
+    const expr = (args.expression as string).trim();
+    try {
+      const sanitized = expr
+        .replace(/×/g, '*')
+        .replace(/÷/g, '/')
+        .replace(/（/g, '(')
+        .replace(/）/g, ')')
+        .replace(/\^/g, '**');
+
+      if (/^[\d\s+\-*/().%]+$/.test(sanitized)) {
+        const result = safeEval(sanitized);
+        if (typeof result === 'number' && isFinite(result)) {
+          const formatted = Number.isInteger(result) ? result.toString() : result.toFixed(4).replace(/\.?0+$/, '');
+          return `## 计算结果${desc}\n\n\`${expr}\` = **${formatted}**`;
+        }
+      }
+    } catch {
+      // 本地解析失败，fallback 到 Python 引擎
+    }
+  }
+
+  // 复杂运算：调用 Python 计算引擎
+  const mlUrl = process.env.ML_SERVICE_URL || 'http://localhost:5100';
+  const mlKey = process.env.ML_API_KEY || '';
+
+  try {
+    const res = await fetch(`${mlUrl}/compute`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(mlKey ? { 'X-API-Key': mlKey } : {}),
+      },
+      body: JSON.stringify(args),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      // Python 服务不可用 → 对 evaluate 降级到本地简单计算
+      if (operation === 'evaluate' && args.expression) {
+        try {
+          const result = safeEval((args.expression as string).replace(/\^/g, '**'));
+          if (typeof result === 'number' && isFinite(result)) {
+            const formatted = Number.isInteger(result) ? result.toString() : result.toFixed(4).replace(/\.?0+$/, '');
+            return `## 计算结果${desc}\n\n\`${args.expression}\` = **${formatted}**\n\n_(Python 计算引擎不可用，仅支持基础算术)_`;
+          }
+        } catch { /* ignore */ }
+      }
+      return `计算引擎错误 (HTTP ${res.status}): ${errText.slice(0, 200)}`;
+    }
+
+    const json = await res.json();
+    const data = json.data;
+
+    if (!data) return `计算引擎返回空结果`;
+
+    // 格式化结果
+    return formatComputeResult(operation, data, desc);
+  } catch (e) {
+    // 网络超时/不可达 → evaluate 降级
+    if (operation === 'evaluate' && args.expression) {
+      try {
+        const result = safeEval((args.expression as string).replace(/\^/g, '**'));
+        if (typeof result === 'number' && isFinite(result)) {
+          const formatted = Number.isInteger(result) ? result.toString() : result.toFixed(4).replace(/\.?0+$/, '');
+          return `## 计算结果${desc}\n\n\`${args.expression}\` = **${formatted}**\n\n_(Python 计算引擎离线，仅支持基础算术)_`;
+        }
+      } catch { /* ignore */ }
+    }
+    return `计算引擎不可用: ${e instanceof Error ? e.message : '连接失败'}\n请确保 ML 微服务已启动 (ML_SERVICE_URL=${mlUrl})`;
+  }
+}
+
+/** 格式化 Python 计算引擎返回的结果 */
+function formatComputeResult(operation: string, data: any, desc: string): string {
+  const header = desc ? `## 计算结果${desc}` : '## 计算结果';
+
+  switch (data.type) {
+    case 'value':
+      return `${header}\n\n\`${data.expression}\` = **${data.result}**${data.latex ? `\n\nLaTeX: $${data.latex}$` : ''}`;
+
+    case 'expression':
+      return `${header}\n\n\`${data.expression}\` = ${data.result}${data.latex ? `\n\nLaTeX: $${data.latex}$` : ''}`;
+
+    case 'solution':
+      if (data.count === 0) return `${header}\n\n方程 \`${data.equation}\` 无实数解`;
+      const sols = data.solutions.map((s: any) => `${s.exact}${s.approx != null ? ` ≈ ${s.approx}` : ''}`).join('，');
+      return `${header}\n\n方程 \`${data.equation}\` 的解（关于 ${data.variable}）：\n\n**${sols}**`;
+
+    case 'system_solution':
+      if (data.solution) {
+        const entries = Object.entries(data.solution).map(([k, v]: [string, any]) => `${k} = ${(v as any).exact ?? v}`).join('，');
+        return `${header}\n\n方程组解：**${entries}**`;
+      }
+      return `${header}\n\n${JSON.stringify(data.solutions ?? data.solution ?? '无解')}`;
+
+    case 'derivative':
+      return `${header}\n\n$\\frac{d^{${data.order}}}{d${data.variable}^{${data.order}}}(${data.expression})$ = **${data.result}**\n\nLaTeX: $${data.latex}$`;
+
+    case 'definite_integral':
+      return `${header}\n\n$\\int_{${data.bounds}} ${data.expression} \\, d${data.variable}$ = **${data.result}**${data.approx != null ? ` ≈ ${data.approx}` : ''}\n\nLaTeX: $${data.latex}$`;
+
+    case 'indefinite_integral':
+      return `${header}\n\n$\\int ${data.expression} \\, d${data.variable}$ = **${data.result}** + C\n\nLaTeX: $${data.latex}$`;
+
+    case 'limit':
+      return `${header}\n\n$\\lim_{${data.variable} \\to ${data.point}} ${data.expression}$ = **${data.result}**${data.approx != null ? ` ≈ ${data.approx}` : ''}\n\nLaTeX: $${data.latex}$`;
+
+    case 'series':
+      return `${header}\n\n${data.expression} 在 ${data.variable}=${data.point} 处的 ${data.order} 阶展开：\n\n**${data.result}**\n\nLaTeX: $${data.latex}$`;
+
+    case 'matrix':
+      return `${header}\n\n矩阵 ${data.operation} 结果：**${data.result}**${data.latex ? `\n\nLaTeX: $${data.latex}$` : ''}${data.eigenvalues ? `\n\n特征值: ${JSON.stringify(data.eigenvalues)}` : ''}`;
+
+    case 'physics':
+      return `${header}\n\n${data.description}\n\n参数: ${JSON.stringify(data.params)}\n\n结果: **${data.result}** ${data.unit}`;
+
+    default:
+      return `${header}\n\n${JSON.stringify(data, null, 2)}`;
+  }
+}
+
+/** 安全表达式求值（仅支持数字和基本四则运算） */
+function safeEval(expr: string): number {
+  // Tokenize
+  const tokens: (number | string)[] = [];
+  let i = 0;
+  while (i < expr.length) {
+    if (expr[i] === ' ') { i++; continue; }
+    if (/[\d.]/.test(expr[i])) {
+      let num = '';
+      while (i < expr.length && /[\d.]/.test(expr[i])) { num += expr[i]; i++; }
+      tokens.push(parseFloat(num));
+    } else if ('+-*/%'.includes(expr[i])) {
+      tokens.push(expr[i]); i++;
+    } else if (expr[i] === '(') {
+      tokens.push('('); i++;
+    } else if (expr[i] === ')') {
+      tokens.push(')'); i++;
+    } else if (expr[i] === '*' && expr[i + 1] === '*') {
+      tokens.push('**'); i += 2;
+    } else {
+      throw new Error(`Unexpected character: ${expr[i]}`);
+    }
+  }
+
+  // Recursive descent parser
+  let pos = 0;
+  function parseExpr(): number {
+    let result = parseTerm();
+    while (pos < tokens.length && (tokens[pos] === '+' || tokens[pos] === '-')) {
+      const op = tokens[pos++];
+      const right = parseTerm();
+      result = op === '+' ? result + right : result - right;
+    }
+    return result;
+  }
+  function parseTerm(): number {
+    let result = parsePower();
+    while (pos < tokens.length && (tokens[pos] === '*' || tokens[pos] === '/' || tokens[pos] === '%')) {
+      const op = tokens[pos++];
+      const right = parsePower();
+      if (op === '*') result *= right;
+      else if (op === '/') { if (right === 0) throw new Error('Division by zero'); result /= right; }
+      else result %= right;
+    }
+    return result;
+  }
+  function parsePower(): number {
+    let result = parseUnary();
+    if (pos < tokens.length && tokens[pos] === '**') {
+      pos++;
+      const right = parsePower(); // right-associative
+      result = Math.pow(result, right);
+    }
+    return result;
+  }
+  function parseUnary(): number {
+    if (pos < tokens.length && tokens[pos] === '-') {
+      pos++;
+      return -parseAtom();
+    }
+    if (pos < tokens.length && tokens[pos] === '+') {
+      pos++;
+    }
+    return parseAtom();
+  }
+  function parseAtom(): number {
+    if (pos < tokens.length && tokens[pos] === '(') {
+      pos++; // skip '('
+      const result = parseExpr();
+      if (pos < tokens.length && tokens[pos] === ')') pos++; // skip ')'
+      return result;
+    }
+    const token = tokens[pos++];
+    if (typeof token === 'number') return token;
+    throw new Error(`Expected number, got: ${token}`);
+  }
+
+  const result = parseExpr();
+  if (pos < tokens.length) throw new Error(`Unexpected token: ${tokens[pos]}`);
+  return result;
+}
+
 /** 根据工具名推断任务类型 */
 function inferTaskType(tool: string): AgentTask['type'] {
   switch (tool) {
@@ -355,6 +617,8 @@ function inferTaskType(tool: string): AgentTask['type'] {
     case 'university_query':
     case 'analysis_run':
     case 'investment_analyze':
+    case 'web_search':
+    case 'calculate':
       return 'query';
     case 'todo_create':
     case 'memo_create':

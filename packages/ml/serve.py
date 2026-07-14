@@ -254,10 +254,20 @@ def before_request_hook():
 def health():
     models_loaded = _xgb_model is not None
     uptime = time.time() - _metrics['start_time']
+
+    # Check compute engine availability
+    compute_available = False
+    try:
+        from compute import HAS_SYMPY, HAS_SCIPY
+        compute_available = HAS_SYMPY
+    except ImportError:
+        pass
+
     return jsonify({
         'status': 'ok',
         'model': 'admission-predictor',
         'models_loaded': models_loaded,
+        'compute_available': compute_available,
         'feature_version': (_feature_meta or {}).get('version', 'unknown'),
         'feature_count': len(FEATURE_NAMES),
         'uptime_seconds': round(uptime, 1),
@@ -400,6 +410,59 @@ def predict_batch():
         'success_count': len(results),
         'error_count': len(errors),
     })
+
+
+@app.route('/compute', methods=['POST'])
+def compute_endpoint():
+    """
+    数学计算引擎
+
+    Body:
+    {
+        "operation": "solve|evaluate|derivative|integral|limit|series|matrix|physics|solve_system",
+        ... 操作参数
+    }
+
+    示例:
+    - 求解方程: {"operation": "solve", "equation": "x**2 - 5*x + 6"}
+    - 求导:     {"operation": "derivative", "expression": "x**3 + 2*x", "variable": "x"}
+    - 定积分:   {"operation": "integral", "expression": "x**2", "lower": "0", "upper": "1"}
+    - 物理公式: {"operation": "physics", "formula": "kinetic_energy", "params": {"m": 2, "v": 10}}
+
+    Headers:
+        X-API-Key: <ML_API_KEY>
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Missing JSON body'}), 400
+
+    operation = data.pop('operation', None)
+    if not operation:
+        return jsonify({'error': 'Missing "operation" field'}), 400
+
+    try:
+        from compute import compute
+        t0 = time.time()
+        result = compute(operation, **data)
+        _metrics['requests_total'] += 1
+        _metrics['requests_success'] += 1
+        _metrics['latency_sum_ms'] += (time.time() - t0) * 1000
+
+        if 'error' in result:
+            _metrics['requests_error'] += 1
+            _metrics['requests_success'] -= 1
+            return jsonify({'status': 'error', **result}), 400
+
+        return jsonify({'status': 'ok', 'data': result})
+    except ImportError as e:
+        _metrics['requests_total'] += 1
+        _metrics['requests_error'] += 1
+        return jsonify({'error': f'Module not available: {str(e)}'}), 503
+    except Exception as e:
+        _metrics['requests_total'] += 1
+        _metrics['requests_error'] += 1
+        logger.error(f"Compute error: {e}")
+        return jsonify({'error': f'Computation failed: {str(e)}'}), 500
 
 
 @app.errorhandler(404)

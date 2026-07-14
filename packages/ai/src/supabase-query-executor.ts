@@ -302,4 +302,97 @@ export class SupabaseQueryExecutor implements QueryExecutor {
     }
     return data ?? [];
   }
+
+  /** 职业薪资查询 */
+  async getCareerSalary(params: {
+    majorName?: string;
+    careerField?: string;
+    limit?: number;
+  }): Promise<unknown[]> {
+    const limit = this.clampLimit(params.limit, 20);
+    const majorName = params.majorName ? this.sanitize(params.majorName) : undefined;
+
+    let query = this.db
+      .from('major_salary_data')
+      .select('*, majors!inner(id, name, category, degree)')
+      .order('year', { ascending: false });
+
+    if (majorName) {
+      query = query.ilike('majors.name', `%${majorName}%`);
+    }
+
+    query = query.limit(limit);
+
+    const { data, error } = await query;
+    if (error) {
+      console.error('[SupabaseExecutor] getCareerSalary:', error.message);
+      return [];
+    }
+
+    return (data ?? []).map((row: any) => ({
+      majorName: row.majors?.name,
+      category: row.majors?.category,
+      year: row.year,
+      avgSalary: row.avg_salary,
+      medianSalary: row.median_salary,
+      employmentRate: row.employment_rate,
+      satisfactionRate: row.satisfaction_rate,
+    }));
+  }
+
+  /** 录取统计：按省份/层次汇总分数线数据 */
+  async getAdmissionStats(params: {
+    province: string;
+    year?: number;
+    tier?: string;
+    limit?: number;
+  }): Promise<unknown[]> {
+    const { province, tier } = params;
+    const year = params.year ?? new Date().getFullYear() - 1;
+    const limit = this.clampLimit(params.limit, 30);
+
+    let query = this.db
+      .from('admission_scores')
+      .select(`
+        min_score,
+        avg_score,
+        min_rank,
+        universities!inner(id, name, province, tier, is_985, is_211)
+      `)
+      .eq('province', province)
+      .eq('year', year);
+
+    if (tier) query = query.eq('universities.tier', tier);
+
+    query = query.order('min_score', { ascending: false }).limit(limit);
+
+    const { data, error } = await query;
+    if (error) {
+      console.error('[SupabaseExecutor] getAdmissionStats:', error.message);
+      return [];
+    }
+
+    if (!data?.length) return [];
+
+    // 汇总统计
+    const scores = data.map((r: any) => r.min_score).filter(Boolean);
+    const stats = {
+      province,
+      year,
+      tier: tier ?? '全部',
+      totalRecords: data.length,
+      minScore: Math.min(...scores),
+      maxScore: Math.max(...scores),
+      avgScore: Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length),
+      universities985: data.filter((r: any) => r.universities?.is_985).length,
+      universities211: data.filter((r: any) => r.universities?.is_211).length,
+      topEntries: data.slice(0, 5).map((r: any) => ({
+        name: r.universities?.name,
+        minScore: r.min_score,
+        minRank: r.min_rank,
+      })),
+    };
+
+    return [stats];
+  }
 }

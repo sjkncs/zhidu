@@ -12,7 +12,7 @@ import { StructuredQueryAgent } from '@zhidu/ai/structured-query-agent';
 import { SupabaseQueryExecutor } from '@zhidu/ai/supabase-query-executor';
 import { gatherUserContext } from '@zhidu/ai/user-context-gatherer';
 import { WEB_SEARCH_TOOL, executeWebSearch, searchWeb } from '@zhidu/ai/web-search';
-import { RUN_TASKS_TOOL, executeRunTasks, VOLUNTEER_RECOMMEND_TOOL, executeVolunteerRecommend, INVESTMENT_ANALYZE_TOOL, executeInvestmentAnalyze } from '@zhidu/ai/agent-tools';
+import { RUN_TASKS_TOOL, executeRunTasks, VOLUNTEER_RECOMMEND_TOOL, executeVolunteerRecommend, INVESTMENT_ANALYZE_TOOL, executeInvestmentAnalyze, CALCULATE_TOOL, executeCalculate } from '@zhidu/ai/agent-tools';
 import { createChatSession, batchCreateChatMessages, deductCredits, getAvailableCredits } from '@zhidu/db/repository';
 import { requireUser, authErrorResponse } from '@/lib/auth-utils';
 import { checkRateLimit, getRateLimitKey, rateLimitResponse, AI_CHAT_LIMIT } from '@/lib/rate-limit';
@@ -278,7 +278,19 @@ export async function POST(request: NextRequest) {
 基于用户分数、省份、科目推荐冲稳保院校方案。
 **适合调用的场景：**
 - "帮我推荐志愿方案"、"XX分能上什么学校"
-- 用户明确提供了分数、省份等参数的志愿咨询`;
+- 用户明确提供了分数、省份等参数的志愿咨询
+
+### calculate — 数学与物理计算引擎
+精确求解数学和物理问题，支持符号运算。
+**适合调用的场景：**
+- 求解方程/方程组（如"解方程 x²-5x+6=0"）
+- 求导数、积分、极限（如"求 sin(x)/x 在 x→0 的极限"）
+- 矩阵运算（行列式、逆矩阵、特征值）
+- 物理公式计算（运动学 v=v₀+at、动能 E=½mv²、欧姆定律 V=IR、透镜公式等）
+- 精确数值计算（如"680/750*100"、复利公式）
+**不适合调用的场景：**
+- 简单的文字问答（不需要精确计算）
+- 编程相关问题`;
 
     // ─── 流式模式 ───
     if (stream) {
@@ -396,7 +408,7 @@ ${sourcesText || '（暂无相关参考资料）'}${structuredContext}${userCont
         options: {
           temperature: 0.7,
           maxTokens: 2048,
-          tools: isFreeChat ? undefined : [askUserTool, WEB_SEARCH_TOOL, RUN_TASKS_TOOL, VOLUNTEER_RECOMMEND_TOOL, INVESTMENT_ANALYZE_TOOL],
+          tools: isFreeChat ? undefined : [askUserTool, WEB_SEARCH_TOOL, RUN_TASKS_TOOL, VOLUNTEER_RECOMMEND_TOOL, INVESTMENT_ANALYZE_TOOL, CALCULATE_TOOL],
         },
       });
 
@@ -788,6 +800,32 @@ ${sourcesText || '（暂无相关参考资料）'}${structuredContext}${userCont
                   }
                 }
 
+                // ─── calculate: 执行数学计算，直接返回结果 ───
+                if (hasToolCall && toolCallName === 'calculate') {
+                  try {
+                    const parsed = JSON.parse(toolCallArgs);
+                    const calcResult = await executeCalculate(parsed);
+
+                    // 通知客户端正在计算
+                    const calcLabel = parsed.expression ?? parsed.equation ?? (parsed.formula ? `${parsed.formula}(${JSON.stringify(parsed.params ?? {})})` : parsed.operation ?? '计算');
+                    controller.enqueue(
+                      encoder.encode(`data: ${JSON.stringify({ type: 'content', delta: `<!-- type:tool-call -->\n正在计算: ${calcLabel}\n<!-- /tool-call -->\n\n` })}\n\n`),
+                    );
+
+                    // 直接输出计算结果
+                    controller.enqueue(
+                      encoder.encode(`data: ${JSON.stringify({ type: 'content', delta: calcResult })}\n\n`),
+                    );
+                    fullContent += calcResult;
+                  } catch (err) {
+                    const errMsg = `计算执行失败: ${err instanceof Error ? err.message : '未知错误'}`;
+                    controller.enqueue(
+                      encoder.encode(`data: ${JSON.stringify({ type: 'content', delta: errMsg })}\n\n`),
+                    );
+                    fullContent += errMsg;
+                  }
+                }
+
                 controller.enqueue(encoder.encode('data: [DONE]\n\n'));
               }
             }
@@ -856,6 +894,24 @@ ${sourcesText || '（暂无相关参考资料）'}${structuredContext}${userCont
       });
       content = result.content;
       sources = result.sources;
+
+      // 同步模式也补充网页来源（KB 相关性不足时）
+      const avgScore = sources.length > 0 ? sources.reduce((s, c) => s + c.score, 0) / sources.length : 0;
+      const syncTimeSensitive = /(?:20[12]\d|今年|去年|最新|今天|刚刚)/.test(query);
+      if (sources.length === 0 || avgScore < 0.30 || syncTimeSensitive) {
+        try {
+          const webResults = await searchWeb({ query, maxResults: 5 });
+          for (const w of webResults) {
+            sources.push({
+              content: w.snippet,
+              metadata: { title: w.title, sourceUrl: w.url },
+              score: 0.8,
+            });
+          }
+        } catch {
+          // web search failed silently
+        }
+      }
     }
 
     // Persist synchronous messages

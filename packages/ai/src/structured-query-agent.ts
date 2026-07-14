@@ -32,6 +32,7 @@ export interface StructuredQuery {
     universityId?: string;
     majorName?: string;
     majorId?: string;
+    careerField?: string;
     tier?: string;
     riskLevel?: 'RUSH' | 'STABLE' | 'SAFE';
     limit?: number;
@@ -146,6 +147,21 @@ export interface QueryExecutor {
     province?: string;
     score?: number;
     category?: string;
+    limit?: number;
+  }): Promise<unknown[]>;
+
+  /** 职业薪资查询 */
+  getCareerSalary(params: {
+    majorName?: string;
+    careerField?: string;
+    limit?: number;
+  }): Promise<unknown[]>;
+
+  /** 录取统计汇总 */
+  getAdmissionStats(params: {
+    province: string;
+    year?: number;
+    tier?: string;
     limit?: number;
   }): Promise<unknown[]>;
 }
@@ -361,6 +377,50 @@ export class StructuredQueryAgent {
             message: data.length > 0
               ? `为你推荐 ${data.length} 个专业方向`
               : '暂无推荐结果，请完善个人信息后重试。',
+          };
+        }
+
+        case 'CAREER_SALARY': {
+          const data = await this.executor.getCareerSalary({
+            majorName: filters.majorName,
+            careerField: filters.careerField,
+            limit: filters.limit ?? 10,
+          });
+
+          return {
+            query: structuredQuery,
+            data,
+            total: data.length,
+            message: data.length > 0
+              ? `查询到 ${data.length} 条薪资数据`
+              : '暂无该专业/职业的薪资数据，建议结合网络搜索了解行业薪酬水平。',
+          };
+        }
+
+        case 'ADMISSION_STATS': {
+          if (!filters.province) {
+            return {
+              query: structuredQuery,
+              data: [],
+              total: 0,
+              message: '请提供省份信息。',
+            };
+          }
+
+          const data = await this.executor.getAdmissionStats({
+            province: filters.province,
+            year: filters.year,
+            tier: filters.tier,
+            limit: filters.limit ?? 30,
+          });
+
+          return {
+            query: structuredQuery,
+            data,
+            total: data.length,
+            message: data.length > 0
+              ? `已汇总 ${filters.province} ${filters.year ?? '最近年份'} 录取统计数据`
+              : '暂无该省份的录取统计数据。',
           };
         }
 

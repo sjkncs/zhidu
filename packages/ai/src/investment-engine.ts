@@ -301,6 +301,139 @@ class MockMarketDataProvider implements MarketDataProvider {
   }
 }
 
+/**
+ * 实时行情数据提供者 — 尝试从免费公开 API 获取真实数据
+ * 失败时自动降级到 MockMarketDataProvider
+ * 支持：Yahoo Finance（美股/港股）、CoinGecko（加密货币）
+ * A股暂时降级到 Mock（需要 Tushare token 或新浪接口）
+ */
+class LiveMarketDataProvider implements MarketDataProvider {
+  private fallback = new MockMarketDataProvider();
+
+  async getOHLCV(symbol: string, market: string, range: string): Promise<OHLCV[]> {
+    try {
+      if (market === '美股' || market === '港股') {
+        return await this.fetchYahooOHLCV(symbol, market, range);
+      }
+      if (['BTC', 'ETH', 'SOL', 'DeFi'].includes(market) || ['BTC', 'ETH', 'SOL'].includes(symbol.toUpperCase())) {
+        return await this.fetchCoinGeckoOHLCV(symbol, range);
+      }
+      // A股和其他市场：暂时降级到 mock
+      return this.fallback.getOHLCV(symbol, market, range);
+    } catch (e) {
+      console.warn(`[LiveDataProvider] OHLCV fetch failed for ${symbol}/${market}, falling back to mock:`, e instanceof Error ? e.message : e);
+      return this.fallback.getOHLCV(symbol, market, range);
+    }
+  }
+
+  async getSentiment(symbol: string): Promise<{ score: number; sources: number }> {
+    // Sentiment requires NLP analysis — delegate to mock for now
+    return this.fallback.getSentiment(symbol);
+  }
+
+  async getDeFiPool(address: string, chain: string): Promise<DeFiPoolData> {
+    // DeFi pool data requires specialized APIs — delegate to mock
+    return this.fallback.getDeFiPool(address, chain);
+  }
+
+  private async fetchYahooOHLCV(symbol: string, market: string, range: string): Promise<OHLCV[]> {
+    const yfSymbol = market === '港股' ? `${symbol}.HK` : symbol;
+    const interval = this.rangeToYFInterval(range);
+    const rangeParam = this.rangeToYFRange(range);
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yfSymbol}?interval=${interval}&range=${rangeParam}`;
+
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) throw new Error(`Yahoo Finance HTTP ${res.status}`);
+
+    const json = await res.json();
+    const result = json?.chart?.result?.[0];
+    if (!result?.timestamp) throw new Error('No data from Yahoo Finance');
+
+    const quotes = result.indicators?.quote?.[0];
+    if (!quotes) throw new Error('No quote data');
+
+    return result.timestamp.map((ts: number, i: number) => ({
+      timestamp: new Date(ts * 1000).toISOString(),
+      open: +(quotes.open?.[i] ?? 0).toFixed(2),
+      high: +(quotes.high?.[i] ?? 0).toFixed(2),
+      low: +(quotes.low?.[i] ?? 0).toFixed(2),
+      close: +(quotes.close?.[i] ?? 0).toFixed(2),
+      volume: quotes.volume?.[i] ?? 0,
+    })).filter((b: OHLCV) => b.close > 0);
+  }
+
+  private async fetchCoinGeckoOHLCV(symbol: string, range: string): Promise<OHLCV[]> {
+    const coinId = this.symbolToCoinGeckoId(symbol);
+    const days = this.rangeToDays(range);
+    const url = `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart?vs_currency=usd&days=${days}`;
+
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
+
+    const json = await res.json();
+    const prices = json?.prices;
+    const volumes = json?.total_volumes;
+    if (!prices?.length) throw new Error('No data from CoinGecko');
+
+    return prices.map((p: number[], i: number) => ({
+      timestamp: new Date(p[0]).toISOString(),
+      open: +p[1].toFixed(2),
+      high: +p[1].toFixed(2),
+      low: +p[1].toFixed(2),
+      close: +p[1].toFixed(2),
+      volume: Math.round(volumes?.[i]?.[1] ?? 0),
+    }));
+  }
+
+  private symbolToCoinGeckoId(symbol: string): string {
+    const map: Record<string, string> = {
+      BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana',
+      BNB: 'binancecoin', ADA: 'cardano', XRP: 'ripple',
+      DOGE: 'dogecoin', AVAX: 'avalanche-2', DOT: 'polkadot',
+    };
+    return map[symbol.toUpperCase()] ?? symbol.toLowerCase();
+  }
+
+  private rangeToDays(range: string): number {
+    switch (range) {
+      case '1w': return 7;
+      case '1m': return 30;
+      case '3m': return 90;
+      case '6m': return 180;
+      case '1y': return 365;
+      default: return 90;
+    }
+  }
+
+  private rangeToYFInterval(range: string): string {
+    switch (range) {
+      case '1w': return '1h';
+      case '1m': return '1d';
+      case '3m': return '1d';
+      case '6m': return '1d';
+      case '1y': return '1wk';
+      default: return '1d';
+    }
+  }
+
+  private rangeToYFRange(range: string): string {
+    switch (range) {
+      case '1w': return '5d';
+      case '1m': return '1mo';
+      case '3m': return '3mo';
+      case '6m': return '6mo';
+      case '1y': return '1y';
+      default: return '3mo';
+    }
+  }
+}
+
 // ─── Technical Indicators ───────────────────────────────────────────────────
 
 function calcSMA(data: number[], period: number): number[] {
@@ -427,7 +560,7 @@ export class InvestmentAnalysisEngine {
   private previousRecommendations: Map<string, PreviousRecommendation[]> = new Map();
 
   constructor(provider?: MarketDataProvider) {
-    this.provider = provider ?? new MockMarketDataProvider();
+    this.provider = provider ?? new LiveMarketDataProvider();
   }
 
   // ─── Public: analyzeAsset ───────────────────────────────────────────
