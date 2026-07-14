@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { Source } from '@/lib/sse-parser';
-import { BookOpen, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronUp, ExternalLink, Globe } from 'lucide-react';
 
 interface SourcePanelProps {
   sources: Source[];
@@ -44,6 +44,7 @@ export function SourcePanel({ sources }: SourcePanelProps) {
             {sources.map((source, i) => {
               const rel = relevanceLabel(source.score);
               const hasUrl = !!source.url;
+              const isWeb = source.type === 'web';
               const handleClick = () => {
                 if (hasUrl) window.open(source.url, '_blank', 'noopener,noreferrer');
               };
@@ -62,16 +63,23 @@ export function SourcePanel({ sources }: SourcePanelProps) {
                   {/* Content */}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="truncate text-[13px] font-medium text-text-primary">
+                      <p className={`truncate text-[13px] font-medium ${hasUrl ? 'text-blue' : 'text-text-primary'}`}>
                         {source.title || '未命名来源'}
                       </p>
-                      <span
-                        className={`shrink-0 rounded-full border px-2 py-px text-[10px] font-medium ${rel.cls}`}
-                      >
-                        {rel.text}
-                      </span>
+                      {isWeb ? (
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-px text-[10px] font-medium text-sky-500">
+                          <Globe className="h-2.5 w-2.5" />
+                          网页
+                        </span>
+                      ) : (
+                        <span
+                          className={`shrink-0 rounded-full border px-2 py-px text-[10px] font-medium ${rel.cls}`}
+                        >
+                          {rel.text}
+                        </span>
+                      )}
                       {hasUrl && (
-                        <ExternalLink className="h-3 w-3 shrink-0 text-text-tertiary opacity-0 transition-opacity group-hover:opacity-100" />
+                        <ExternalLink className={`h-3 w-3 shrink-0 ${isWeb ? 'text-blue/60' : 'text-text-tertiary opacity-0 transition-opacity group-hover:opacity-100'}`} />
                       )}
                     </div>
                     {source.snippet && (

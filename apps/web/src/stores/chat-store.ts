@@ -207,6 +207,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }));
             break;
 
+          case 'sources_update':
+            set((state) => ({
+              messages: state.messages.map((m) => {
+                if (m.id !== assistantId) return m;
+                const existing = m.sources ?? [];
+                const existingUrls = new Set(existing.map((s) => s.url).filter(Boolean));
+                const newSources = event.sources.filter((s) => !s.url || !existingUrls.has(s.url));
+                return { ...m, sources: [...existing, ...newSources] };
+              }),
+            }));
+            break;
+
           case 'choice_prompt':
             set((state) => ({
               messages: state.messages.map((m) =>

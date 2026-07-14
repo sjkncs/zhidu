@@ -15,6 +15,7 @@ export interface Source {
   snippet: string;
   score: number;
   url?: string;
+  type?: 'kb' | 'web';
 }
 
 /** 选项卡片数据（P1: 结构化选择引导） */
@@ -40,6 +41,11 @@ export interface TaskUpdateData {
 
 export interface SourcesEvent {
   type: 'sources';
+  sources: Source[];
+}
+
+export interface SourcesUpdateEvent {
+  type: 'sources_update';
   sources: Source[];
 }
 
@@ -74,6 +80,7 @@ export interface SessionEvent {
 
 export type SSEEvent =
   | SourcesEvent
+  | SourcesUpdateEvent
   | ContentEvent
   | ChoicePromptEvent
   | TaskUpdateEvent
@@ -122,6 +129,8 @@ export async function* parseSSEStream(
 
           if (parsed.type === 'sources' && Array.isArray(parsed.sources)) {
             yield { type: 'sources', sources: parsed.sources };
+          } else if (parsed.type === 'sources_update' && Array.isArray(parsed.sources)) {
+            yield { type: 'sources_update', sources: parsed.sources };
           } else if (parsed.type === 'content' && typeof parsed.delta === 'string') {
             yield { type: 'content', delta: parsed.delta };
           } else if (parsed.type === 'error' && typeof parsed.error === 'string') {

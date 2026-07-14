@@ -19,7 +19,7 @@ interface MessageBubbleProps {
 
 // ── Citation marker component ──
 
-const CITATION_REGEX = /\[(\d+)\]/g;
+const CITATION_REGEX = /\[(?:来源)?(\d+)\]/g;
 
 function CitationMarker({ ref: refNum }: { ref: string }) {
   const handleClick = () => {

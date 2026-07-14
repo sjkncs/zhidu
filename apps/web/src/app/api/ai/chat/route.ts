@@ -11,7 +11,7 @@ import { createLLMService } from '@zhidu/ai/llm-service';
 import { StructuredQueryAgent } from '@zhidu/ai/structured-query-agent';
 import { SupabaseQueryExecutor } from '@zhidu/ai/supabase-query-executor';
 import { gatherUserContext } from '@zhidu/ai/user-context-gatherer';
-import { WEB_SEARCH_TOOL, executeWebSearch } from '@zhidu/ai/web-search';
+import { WEB_SEARCH_TOOL, executeWebSearch, searchWeb } from '@zhidu/ai/web-search';
 import { RUN_TASKS_TOOL, executeRunTasks, VOLUNTEER_RECOMMEND_TOOL, executeVolunteerRecommend, INVESTMENT_ANALYZE_TOOL, executeInvestmentAnalyze } from '@zhidu/ai/agent-tools';
 import { createChatSession, batchCreateChatMessages, deductCredits, getAvailableCredits } from '@zhidu/db/repository';
 import { requireUser, authErrorResponse } from '@/lib/auth-utils';
@@ -290,10 +290,64 @@ export async function POST(request: NextRequest) {
         chunks = chunks.filter(c => c.score >= 0.15);
       }
 
-      // 构建系统提示
-      const sourcesText = chunks
+      // ─── 自动网页搜索补充 ───
+      // 触发条件（满足任一即搜索）：
+      //   a) 知识库无结果
+      //   b) 知识库平均相关性 < 0.30
+      //   c) 查询含时效性关键词（年份、"最新"等）
+      //   d) 自由对话模式下的事实性问题（含问号或疑问词）
+      let webSources: Array<{ title: string; url: string; snippet: string }> = [];
+      let autoSearched = false;
+
+      const TIME_SENSITIVE_RE = /(?:20[12]\d|今年|去年|明年|最新|最近|今天|昨天|刚刚|目前|当前)/;
+      const FACTUAL_QUERY_RE = /[？?]|(?:什么|哪些|怎么|如何|为什么|是否|有没有|公布|发布)/;
+      const isTimeSensitive = TIME_SENSITIVE_RE.test(query);
+      const isFactualQuery = FACTUAL_QUERY_RE.test(query);
+
+      if (!isFreeChat) {
+        const avgScore = chunks.length > 0 ? chunks.reduce((s, c) => s + c.score, 0) / chunks.length : 0;
+        const needsWebSearch =
+          chunks.length === 0 ||
+          avgScore < 0.30 ||
+          isTimeSensitive;
+
+        if (needsWebSearch) {
+          try {
+            webSources = await searchWeb({ query, maxResults: 5 });
+            autoSearched = true;
+            console.log(`[Chat] Auto web search triggered (reason: ${chunks.length === 0 ? 'no KB' : avgScore < 0.30 ? `low score ${avgScore.toFixed(2)}` : 'time-sensitive'}), got ${webSources.length} results`);
+          } catch (e) {
+            console.warn('[Chat] Auto web search failed:', e instanceof Error ? e.message : e);
+          }
+        }
+      } else if (isTimeSensitive || isFactualQuery) {
+        // 自由对话模式：仅对时效性查询或事实性问题自动搜索
+        try {
+          webSources = await searchWeb({ query, maxResults: 5 });
+          autoSearched = true;
+          console.log(`[Chat] Freechat auto web search triggered (reason: ${isTimeSensitive ? 'time-sensitive' : 'factual query'}), got ${webSources.length} results`);
+        } catch (e) {
+          console.warn('[Chat] Freechat auto web search failed:', e instanceof Error ? e.message : e);
+        }
+      }
+
+      // 构建系统提示：合并知识库来源 + 网页来源
+      // 当自动搜索成功且有网页来源时，过滤低分 KB 结果并将网页来源前置
+      const filteredChunks = (autoSearched && webSources.length > 0)
+        ? chunks.filter(c => c.score >= 0.35)
+        : chunks;
+
+      const kbSourcesText = filteredChunks
         .map((c, i) => `[${i + 1}] ${c.content}\n    — 来源: ${(c.metadata as any)?.title ?? '未知'}`)
         .join('\n\n');
+      const kbCount = filteredChunks.length;
+      const webSourcesText = webSources
+        .map((w, i) => `[${kbCount + i + 1}] ${w.snippet}\n    — 来源: ${w.title} (${w.url})`)
+        .join('\n\n');
+      // 网页来源前置：让 LLM 优先使用更相关、更时效的网页信息
+      const sourcesText = autoSearched && webSources.length > 0
+        ? [webSourcesText, kbSourcesText].filter(Boolean).join('\n\n')
+        : [kbSourcesText, webSourcesText].filter(Boolean).join('\n\n');
 
       const systemContent = isFreeChat
         ? `你是"知渡"平台的 AI 助手，一个面向高中生和家长的智能顾问。你能够访问用户在平台各模块的个人数据，提供个性化建议。
@@ -347,12 +401,24 @@ ${sourcesText || '（暂无相关参考资料）'}${structuredContext}${userCont
       });
 
       const encoder = new TextEncoder();
-      const sourcesPayload = chunks.map(c => ({
+      const kbSourcesPayload = filteredChunks.map(c => ({
         title: (c.metadata as any)?.title ?? '',
         url: (c.metadata as any)?.sourceUrl,
         snippet: c.content.slice(0, 150),
         score: c.score,
+        type: 'kb' as const,
       }));
+      const webSourcesPayload = webSources.map(w => ({
+        title: w.title,
+        url: w.url,
+        snippet: w.snippet.slice(0, 150),
+        score: 0.8,
+        type: 'web' as const,
+      }));
+      // 自动搜索成功时网页来源前置，否则 KB 来源在前
+      const sourcesPayload = (autoSearched && webSourcesPayload.length > 0)
+        ? [...webSourcesPayload, ...kbSourcesPayload]
+        : [...kbSourcesPayload, ...webSourcesPayload];
 
       // Collect full assistant response for persistence
       let fullContent = '';
@@ -441,16 +507,45 @@ ${sourcesText || '（暂无相关参考资料）'}${structuredContext}${userCont
                       if (queryMatch) searchQuery = queryMatch[1];
                     }
 
+                    // 去重：如果自动搜索已执行且查询相似，复用已有结果
+                    const isDuplicateSearch = autoSearched && webSources.length > 0 &&
+                      (searchQuery === query || searchQuery.length > 0 && query.includes(searchQuery.slice(0, Math.min(10, searchQuery.length))));
+
                     // 通知客户端正在搜索
                     controller.enqueue(
                       encoder.encode(`data: ${JSON.stringify({ type: 'content', delta: `<!-- type:tool-call -->\n正在搜索: ${searchQuery}\n<!-- /tool-call -->\n\n` })}\n\n`),
                     );
 
-                    // 执行网络搜索
-                    const searchResults = await executeWebSearch({
-                      query: searchQuery,
-                      maxResults,
-                    });
+                    let webResults: Array<{ title: string; url: string; snippet: string }>;
+                    if (isDuplicateSearch) {
+                      webResults = webSources;
+                      console.log('[Chat] Skipping duplicate web_search, reusing auto search results');
+                    } else {
+                      // 执行网络搜索（直接调用 searchWeb 获取结构化结果）
+                      webResults = await searchWeb({
+                        query: searchQuery,
+                        maxResults: Math.min(maxResults, 10),
+                      });
+                    }
+
+                    // 发送 sources_update 事件，前端追加网页来源（带可访问 URL）
+                    if (webResults.length > 0) {
+                      const webSourcesUpdate = webResults.map(w => ({
+                        title: w.title,
+                        url: w.url,
+                        snippet: w.snippet.slice(0, 150),
+                        score: 0.8,
+                        type: 'web' as const,
+                      }));
+                      controller.enqueue(
+                        encoder.encode(`data: ${JSON.stringify({ type: 'sources_update', sources: webSourcesUpdate })}\n\n`),
+                      );
+                    }
+
+                    // 格式化为 LLM 可消费的文本
+                    const searchResults = webResults.length > 0
+                      ? `## 网络搜索结果（"${searchQuery}"）\n\n${webResults.map((r, i) => `[${i + 1}] **${r.title}**\n    ${r.snippet}\n    来源: ${r.url}`).join('\n\n')}`
+                      : '未找到相关结果。请基于已有知识回答用户的问题。';
 
                     // 构造第二轮消息（含搜索结果）
                     const followUpMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
